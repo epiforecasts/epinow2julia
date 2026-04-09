@@ -256,12 +256,11 @@ get_samples <- function(object, ...) {
 #' @rdname get_samples
 #' @export
 get_samples.estimate_infections <- function(object, ...) {
-  raw_samples <- extract_samples(object$fit)
-
-  format_samples_with_dates(
-    raw_samples = raw_samples,
-    args = object$args,
-    observations = object$observations
+  julia_samples_to_r(
+    julia_result = object$fit,
+    observations = object$observations,
+    horizon = object$args$horizon %||% 0,
+    seeding_time = object$args$seeding_time %||% 0
   )
 }
 
@@ -288,33 +287,40 @@ get_samples.forecast_infections <- function(object, ...) {
 #' @rdname get_samples
 #' @export
 get_samples.estimate_secondary <- function(object, ...) {
-  # Extract raw posterior samples from the fit
-  raw_samples <- extract_samples(object$fit)
+  ensure_julia()
+  # EstimateSecondaryResult has a predictions DataFrame (summary stats)
+  # and a fit with generated quantities containing expected secondary values.
+  # Extract samples from the GQ expected values.
+  juliaEval('function _get_sec_samples(result)
+    gqs = result.fit.generated_quantities
+    dates = result.observations.date
+    burn_in = 0  # already removed during fitting
+    n_times = length(dates)
 
-  # Extract time-varying parameters
-  burn_in <- object$args$burn_in
-  dates <- object$observations[(burn_in + 1):.N]$date
-  time_varying <- list(
-    sim_secondary = extract_latent_state("sim_secondary", raw_samples, dates)
-  )
-
-  # Combine with static parameters
-  samples <- combine_tv_and_static_params(
-    time_varying, raw_samples, object$args
-  )
-
-  # Add placeholder columns for consistency with estimate_infections format
-  if (!"date" %in% names(samples)) samples[, date := as.Date(NA)]
-  if (!"strat" %in% names(samples)) samples[, strat := NA_character_]
-  if (!"time" %in% names(samples)) samples[, time := NA_integer_]
-  if (!"type" %in% names(samples)) samples[, type := NA_character_]
-
-  # Reorder columns to match estimate_infections format
+    rows = Vector{NamedTuple{(:date, :variable, :sample, :value), Tuple{String, String, Int, Float64}}}()
+    for (si, gq) in enumerate(gqs)
+      expected = gq.expected
+      for t in 1:min(length(expected), n_times)
+        push!(rows, (
+          date = string(dates[t]),
+          variable = "sim_secondary",
+          sample = si,
+          value = Float64(expected[t])
+        ))
+      end
+    end
+    DataFrame(rows)
+  end')
+  julia_df <- juliaCall("_get_sec_samples", object$fit)
+  samples <- data.table::as.data.table(julia_df)
+  samples[, date := as.Date(date)]
+  samples[, time := as.integer(date - min(date)) + 1L]
+  samples[, strat := NA_character_]
+  samples[, type := NA_character_]
   data.table::setcolorder(
     samples,
     c("variable", "time", "date", "sample", "value", "strat", "type")
   )
-
   samples[]
 }
 
@@ -327,11 +333,20 @@ get_samples.forecast_secondary <- function(object, ...) {
 #' @rdname get_samples
 #' @export
 get_samples.estimate_truncation <- function(object, ...) {
-  raw_samples <- extract_samples(object$fit)
-  # extract_delays returns data.table with variable column
+  ensure_julia()
+  # Get truncation distribution parameters from Julia result
+  julia_params <- juliaCall("get_parameters", object$fit)
+  params <- julia_parameters_to_r(object$fit)
 
-  samples <- extract_delays(raw_samples, args = object$args)
-  samples[]
+  # Convert to data.table format
+  results <- lapply(names(params), function(name) {
+    data.table::data.table(
+      variable = name,
+      sample = 1L,
+      value = mean(params[[name]])
+    )
+  })
+  data.table::rbindlist(results)
 }
 
 #' Format sample predictions
@@ -562,308 +577,28 @@ get_predictions.estimate_truncation <- function(
   obs_sets <- object$args$obs_sets
   trunc_max <- object$args$delay_max[1]
 
-  if (format == "summary") {
-    # Extract reconstructed observations summary statistics
-    recon_obs <- extract_stan_param(object$fit, "recon_obs",
-      CrIs = CrIs,
-      var_names = TRUE
+  # For the Julia backend, truncation predictions are obtained from the
+
+  # fitted truncation distribution parameters
+  ensure_julia()
+  params <- julia_parameters_to_r(object$fit)
+
+  # Return a simple summary of the truncation distribution parameters
+  results <- lapply(names(params), function(name) {
+    dt <- data.table::data.table(
+      variable = name,
+      mean = mean(params[[name]]),
+      sd = stats::sd(as.numeric(params[[name]]))
     )
-    recon_obs <- recon_obs[, id := variable][, variable := NULL]
-
-    # Assign dataset index using modulo
-    recon_obs <- recon_obs[, dataset := seq_len(.N)][
-      ,
-      dataset := dataset %% obs_sets
-    ][
-      dataset == 0, dataset := obs_sets
-    ]
-
-    # Link predictions to dates
-    link_preds <- function(index) {
-      target_obs <- dirty_obs[[index]][, idx := .N - 0:(.N - 1)]
-      target_obs <- target_obs[idx < trunc_max]
-      estimates <- recon_obs[dataset == index][, c("id", "dataset") := NULL]
-      estimates <- estimates[, lapply(.SD, as.integer)]
-      estimates <- estimates[, idx := .N - 0:(.N - 1)]
-      if (!is.null(estimates$n_eff)) estimates[, "n_eff" := NULL]
-      if (!is.null(estimates$Rhat)) estimates[, "Rhat" := NULL]
-
-      result <- data.table::merge.data.table(
-        target_obs[, .(date, idx)],
-        estimates,
-        by = "idx", all.x = TRUE
-      )
-      result[, report_date := max(target_obs$date)]
-      result[order(date)][, idx := NULL]
-    }
-
-    predictions <- purrr::map(seq_len(obs_sets), link_preds)
-    data.table::rbindlist(predictions)
-  } else {
-    # Both "sample" and "quantile" need raw samples first
-    raw_samples <- extract_samples(object$fit, pars = "recon_obs")
-    recon_samples <- data.table::as.data.table(raw_samples$recon_obs)
-    recon_samples <- data.table::melt(recon_samples,
-      measure.vars = seq_len(ncol(recon_samples)),
-      variable.name = "obs_idx",
-      value.name = "predicted"
-    )
-    recon_samples[, obs_idx := as.integer(obs_idx)]
-    recon_samples[, sample := seq_len(.N), by = obs_idx]
-    recon_samples[, dataset := ((obs_idx - 1) %% obs_sets) + 1]
-
-    # Link samples to dates
-    link_samples <- function(index) {
-      target_obs <- dirty_obs[[index]][, idx := .N - 0:(.N - 1)]
-      target_obs <- target_obs[idx < trunc_max]
-      target_obs[, obs_idx := seq_len(.N)]
-
-      samples_subset <- recon_samples[dataset == index]
-      result <- data.table::merge.data.table(
-        target_obs[, .(date, obs_idx)],
-        samples_subset[, .(obs_idx, sample, predicted)],
-        by = "obs_idx"
-      )[, obs_idx := NULL]
-
-      # Add forecast metadata
-      forecast_date <- max(target_obs$date, na.rm = TRUE)
-      result[, forecast_date := forecast_date]
-      result[, horizon := as.numeric(date - forecast_date)]
-      result[, dataset := index]
-
-      result
-    }
-
-    predictions <- purrr::map(seq_len(obs_sets), link_samples)
-    predictions <- data.table::rbindlist(predictions)
-
-    if (format == "sample") {
-      # Reorder columns for sample format
-      data.table::setcolorder(
-        predictions,
-        c("dataset", "forecast_date", "date", "horizon", "sample", "predicted")
-      )
-    } else {
-      # format == "quantile": aggregate to quantiles
-      predictions <- predictions[
-        ,
-        .(predicted = quantile(predicted, probs = quantiles)),
-        by = .(dataset, forecast_date, date, horizon)
-      ]
-      predictions[
-        , quantile_level := rep(quantiles, .N / length(quantiles))
-      ]
-      data.table::setcolorder(
-        predictions,
-        c("dataset", "forecast_date", "date", "horizon",
-          "quantile_level", "predicted")
-      )
-    }
-
-    predictions[]
-  }
-}
-
-
-#' Reconstruct a dist_spec from stored stan data and posterior
-#'
-#' @param object A fitted model object containing fit and args
-#' @param delay_name The name of the delay (e.g., "generation_time")
-#' @return A dist_spec object, or NULL if the delay doesn't exist
-#' @keywords internal
-reconstruct_delay <- function(object, delay_name) {
-  stan_data <- object$args
-
-  # Get the delay ID for this named delay
-  delay_id <- stan_data[[paste0("delay_id_", delay_name)]]
-  if (is.null(delay_id) || delay_id == 0) {
-    return(NULL)
-  }
-
-  types_groups <- stan_data$delay_types_groups
-  if (is.null(types_groups)) {
-    return(NULL)
-  }
-
-  # Extract posterior if parameters were estimated
-  posterior <- NULL
-  if (stan_data$delay_params_length > 0 && !is.null(object$fit)) {
-    posterior <- extract_stan_param(object$fit, params = "delay_params")
-  }
-
-  # Get indices for this delay type
-  delay_indices <- seq(types_groups[delay_id], types_groups[delay_id + 1] - 1)
-  types_p <- stan_data$delay_types_p[delay_indices]
-
-  # Reconstruct each delay component
-  delay_list <- lapply(seq_along(delay_indices), function(i) {
-    idx <- delay_indices[i]
-    type_id <- stan_data$delay_types_id[idx]
-
-    if (types_p[i] == 1) {
-      reconstruct_parametric(stan_data, type_id, posterior)
-    } else {
-      reconstruct_nonparametric(stan_data, type_id)
-    }
+    dt
   })
-
-  if (length(delay_list) == 1) delay_list[[1]] else do.call(c, delay_list)
+  data.table::rbindlist(results)
 }
 
-#' Create a Normal distribution from posterior samples
-#'
-#' Helper function to create a Normal distribution from a row of posterior
-#' summary statistics, with consistent rounding.
-#'
-#' @param posterior Data frame with `mean` and `sd` columns from Stan output
-#' @param idx Integer index into the posterior data frame
-#' @return A `Normal` distribution object
-#' @keywords internal
-posterior_to_normal <- function(posterior, idx) {
-  Normal(
-    mean = round(posterior$mean[idx], 3),
-    sd = round(posterior$sd[idx], 3)
-  )
-}
 
-#' Reconstruct a parametric delay distribution
-#'
-#' Helper function to reconstruct a single parametric delay component from
-#' Stan data and posterior samples.
-#'
-#' @param stan_data List of Stan data containing delay specification
-#' @param param_id Integer index into the parametric delay arrays
-#' @param posterior Data frame with posterior mean and sd for delay_params,
-#'   or NULL if not estimated
-#' @return A `dist_spec` object representing the delay distribution
-#' @keywords internal
-reconstruct_parametric <- function(stan_data, param_id, posterior) {
-  dist_type <- dist_spec_distributions()[stan_data$delay_dist[param_id] + 1]
-  dist_max <- stan_data$delay_max[param_id]
-
-  # Get parameter indices and values
-  param_idx <- seq(
-    stan_data$delay_params_groups[param_id],
-    stan_data$delay_params_groups[param_id + 1] - 1
-  )
-  prior_mean <- stan_data$delay_params_mean[param_idx]
-  prior_sd <- stan_data$delay_params_sd[param_idx]
-
-  # Build parameters: posterior if estimated, fixed or prior otherwise
-  # NA handling: if prior_sd[j] is NA, then prior_sd[j] > 0 evaluates to NA,
-  # and NA && !is.na(NA) -> NA && FALSE -> FALSE, so estimated = FALSE.
-  # This correctly treats NA prior_sd as a fixed (non-estimated) parameter.
-  param_names <- natural_params(dist_type)
-  parameters <- lapply(seq_along(prior_mean), function(j) {
-    estimated <- prior_sd[j] > 0 && !is.na(prior_sd[j])
-    if (estimated && !is.null(posterior)) {
-      posterior_to_normal(posterior, param_idx[j])
-    } else if (prior_sd[j] == 0 || is.na(prior_sd[j])) {
-      prior_mean[j]
-    } else {
-      Normal(prior_mean[j], prior_sd[j])
-    }
-  })
-  names(parameters) <- param_names
-
-  new_dist_spec(params = parameters, max = dist_max, distribution = dist_type)
-}
-
-#' Reconstruct a nonparametric delay distribution
-#'
-#' Helper function to reconstruct a single nonparametric delay component from
-#' Stan data. Nonparametric delays are stored as probability mass functions.
-#'
-#' @param stan_data List of Stan data containing delay specification
-#' @param np_id Integer index into the nonparametric delay PMF arrays
-#' @return A `dist_spec` object representing the nonparametric delay
-#' @keywords internal
-reconstruct_nonparametric <- function(stan_data, np_id) {
-  pmf_idx <- seq(
-    stan_data$delay_np_pmf_groups[np_id],
-    stan_data$delay_np_pmf_groups[np_id + 1] - 1
-  )
-  NonParametric(pmf = stan_data$delay_np_pmf[pmf_idx])
-}
-
-#' Extract delay distributions from a fitted model
-#'
-#' @description Internal helper to extract delay distributions from the
-#' `delay_id_*` variables in stan data.
-#'
-#' @param x A fitted model object with `$fit` and `$args` components.
-#' @param stan_data The stan data list from `x$args`.
-#'
-#' @return A named list of `dist_spec` objects representing the posterior
-#' distributions of delay parameters.
-#' @keywords internal
-extract_delay_params <- function(x, stan_data) {
-  delay_id_vars <- grep("^delay_id_", names(stan_data), value = TRUE)
-
-
-  # Filter to valid delays (id > 0) and extract names upfront
-  valid <- vapply(delay_id_vars, function(v) {
-    id <- stan_data[[v]]
-    !is.null(id) && id > 0
-  }, logical(1))
-
-  delay_names <- sub("^delay_id_", "", delay_id_vars[valid])
-
-  # Build named list directly
-  result <- purrr::map(delay_names, function(name) reconstruct_delay(x, name))
-  names(result) <- delay_names
-  result
-}
-
-#' Extract scalar parameters from a fitted model
-#'
-#' @description Internal helper to extract scalar parameters (e.g.,
-#' `fraction_observed`) from the params array based on `param_id_*` variables.
-#'
-#' @param x A fitted model object with `$fit` and `$args` components.
-#' @param stan_data The stan data list from `x$args`.
-#'
-#' @return A named list of `dist_spec` objects representing the posterior
-#' distributions of scalar parameters.
-#' @keywords internal
-extract_scalar_params <- function(x, stan_data) {
-  lookup <- stan_data$params_variable_lookup
-  has_params <- !is.null(lookup) && any(lookup > 0) && !is.null(x$fit)
-  if (!has_params) {
-    return(list())
-  }
-
-  posterior <- extract_stan_param(x$fit, params = "params")
-  if (is.null(posterior) || nrow(posterior) == 0) {
-    return(list())
-  }
-
-  param_id_vars <- grep("^param_id_", names(stan_data), value = TRUE)
-  param_names <- sub("^param_id_", "", param_id_vars)
-  ids <- vapply(param_id_vars, function(v) {
-    id <- stan_data[[v]]
-    if (is.null(id) || is.na(id)) 0L else as.integer(id)
-  }, integer(1))
-
-  valid <- ids > 0
-  lookup_idxs <- rep(NA_integer_, length(ids))
-  lookup_idxs[valid] <- lookup[ids[valid]]
-  valid <- valid & !is.na(lookup_idxs) & lookup_idxs > 0 &
-    lookup_idxs <= nrow(posterior)
-
-  result <- purrr::map(which(valid), function(i) {
-    posterior_to_normal(posterior, lookup_idxs[i])
-  })
-  names(result) <- param_names[valid]
-  result
-}
 
 #' @rdname get_parameters
 #' @export
 get_parameters.epinowfit <- function(x, ...) {
-  stan_data <- x$args
-  c(
-    extract_delay_params(x, stan_data),
-    extract_scalar_params(x, stan_data)
-  )
+  julia_parameters_to_r(x$fit)
 }

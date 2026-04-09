@@ -153,7 +153,6 @@ merge_trunc_pred_obs <- function(observations, predictions) {
 #' @inheritParams calc_CrIs
 #' @inheritParams estimate_infections
 #' @importFrom purrr map reduce map_dbl walk
-#' @importFrom rstan sampling
 #' @importFrom data.table copy .N as.data.table merge.data.table setDT
 #' @importFrom data.table setcolorder
 #' @importFrom rlang arg_match
@@ -215,41 +214,39 @@ estimate_truncation <- function(data,
   assert_numeric(zero_threshold, lower = 0)
   assert_logical(verbose)
 
-  # Prepare observation matrix for Stan
-  obs_prep <- prepare_truncation_obs(data, trunc_max = max(truncation))
-  stan_data <- list(
-    obs = obs_prep$obs,
-    obs_dist = obs_prep$obs_dist,
-    t = obs_prep$t,
-    obs_sets = obs_prep$obs_sets
-  )
+  # Ensure Julia backend is ready
+  ensure_julia()
 
-  stan_data <- c(stan_data, create_stan_delays(
-    truncation = truncation,
-    time_points = stan_data$t
-  ))
-
-  # initial conditions
-  init_fn <- function() {
-    c(create_delay_inits(stan_data), list(
-      dispersion = abs(rnorm(1, 0, 1)),
-      sigma = abs(rnorm(1, 0, 1))
+  # Convert list of data.frames to Julia Vector{DataFrame}
+  julia_data_list <- lapply(data, function(df) {
+    dates <- as.character(df$date)
+    confirm <- as.integer(df$confirm)
+    juliaEval(sprintf(
+      'DataFrame(date = Date.([%s]), confirm = [%s])',
+      paste(sprintf('"%s"', dates), collapse = ", "),
+      paste(confirm, collapse = ", ")
     ))
-  }
-  stan_args <- create_stan_args(
-    stan = stan, data = stan_data, init = init_fn, model = "estimate_truncation"
+  })
+
+  julia_data <- juliaCall("collect", julia_data_list)
+
+  # Convert opts
+  julia_trunc <- r_trunc_opts_to_julia(truncation)
+  julia_inference <- stan_opts_to_inference_opts(stan)
+
+  # Call Julia's estimate_truncation
+  julia_result <- juliaCall(
+    "estimate_truncation",
+    julia_data,
+    truncation = julia_trunc,
+    inference = julia_inference,
+    verbose = verbose
   )
-
-  # Warn if truncation distribution is longer than observed time
-  check_truncation_length(stan_args, time_points = stan_data$t)
-
-  # fit
-  fit <- fit_model(stan_args, id = "estimate_truncation")
 
   out <- list(
     observations = data,
-    args = stan_data,
-    fit = fit
+    args = list(seeding_time = 0),
+    fit = julia_result
   )
 
   class(out) <- c("estimate_truncation", "epinowfit", class(out))

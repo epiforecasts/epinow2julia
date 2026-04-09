@@ -67,7 +67,6 @@
 #' @inheritParams estimate_infections
 #' @inheritParams update_secondary_args
 #' @inheritParams calc_CrIs
-#' @importFrom rstan sampling
 #' @importFrom lubridate wday
 #' @importFrom data.table as.data.table merge.data.table nafill
 #' @importFrom utils modifyList
@@ -168,28 +167,10 @@ estimate_secondary <- function(data,
   assert_numeric(burn_in, lower = 0)
   assert_numeric(CrIs, lower = 0, upper = 1)
   assert_data_frame(priors, null.ok = TRUE)
-  assert_class(model, "stanfit", null.ok = TRUE)
   assert_logical(weigh_delay_priors)
   assert_logical(verbose)
 
   reports <- data.table::as.data.table(data)
-
-  secondary_reports <-
-    reports[, list(date, confirm = secondary)]
-
-  ## fill in missing data (required if fitting to prevalence)
-  secondary_reports[, lookup := seq_len(.N)]
-  complete_secondary <- secondary_reports[!is.na(confirm)]
-  ## fill down
-  secondary_reports[, confirm := nafill(confirm, type = "locf")]
-  ## fill any early data up
-  secondary_reports[, confirm := nafill(confirm, type = "nocb")]
-
-  # Ensure that reports and secondary_reports are aligned
-  reports <- merge.data.table(
-    reports, secondary_reports[, list(date)],
-    by = "date"
-  )
 
   if (burn_in >= nrow(reports)) {
     cli_abort(
@@ -200,61 +181,38 @@ estimate_secondary <- function(data,
       )
     )
   }
-  # observation and control data
-  accumulate <- get_accumulate(reports)
-  stan_data <- list(
-    t = nrow(reports),
-    primary = reports$primary,
-    obs = secondary_reports$confirm,
-    obs_time = complete_secondary[lookup > burn_in]$lookup - burn_in,
-    lt = sum(complete_secondary$lookup > burn_in),
-    burn_in = burn_in,
-    seeding_time = 0,
-    any_accumulate = as.integer(any(accumulate)),
-    accumulate = as.integer(accumulate)
-  )
-  # secondary model options
-  stan_data <- c(stan_data, secondary)
-  # delay data
-  stan_data <- c(stan_data, create_stan_delays(
-    reporting = delays,
-    truncation = truncation,
-    time_points = stan_data$t
-  ))
 
-  # observation model data
-  stan_data <- c(stan_data, create_obs_model(obs, dates = reports$date))
+  # Ensure Julia backend is ready
+  ensure_julia()
 
-  params <- list(
-    make_param("fraction_observed", obs$scale, lower_bound = 0),
-    make_param("reporting_overdispersion", obs$dispersion, lower_bound = 0)
+  # Convert data to Julia DataFrame
+  julia_data <- r_secondary_data_to_julia(reports)
+
+  # Convert opts to Julia equivalents
+  julia_secondary <- r_secondary_opts_to_julia(secondary)
+  julia_delays <- r_delay_opts_to_julia(delays)
+  julia_obs <- r_obs_opts_to_julia(obs)
+  julia_inference <- stan_opts_to_inference_opts(stan)
+
+  # Call Julia's estimate_secondary
+  julia_result <- juliaCall(
+    "estimate_secondary",
+    julia_data,
+    secondary = julia_secondary,
+    delays = julia_delays,
+    obs = julia_obs,
+    inference = julia_inference,
+    burn_in = as.integer(burn_in),
+    verbose = verbose
   )
 
-  stan_data <- c(stan_data, create_stan_params(params))
-
-  # update data to use specified priors rather than defaults
-  stan_data <- update_secondary_args(stan_data,
-    priors = priors, verbose = verbose
-  )
-
-  # initial conditions (from estimate_infections)
-  inits <- create_initial_conditions(
-    c(stan_data, list(estimate_r = 0, fixed = 1, bp_n = 0)), params
-  )
-  # fit
-  stan_ <- create_stan_args(
-    stan = stan, data = stan_data, init = inits, model = "estimate_secondary"
-  )
-
-  # Warn if truncation distribution is longer than observed time
-  check_truncation_length(stan_, time_points = stan_data$t)
-
-  fit <- fit_model(stan_, id = "estimate_secondary")
-
-  # Create standardized S3 return structure
+  # Create standardised S3 return structure
   ret <- list(
-    fit = fit,
-    args = stan_data,
+    fit = julia_result,
+    args = list(
+      burn_in = burn_in,
+      seeding_time = 0
+    ),
     observations = reports
   )
 
@@ -603,145 +561,46 @@ forecast_secondary <- function(estimate,
                                samples = NULL,
                                all_dates = FALSE,
                                CrIs = c(0.2, 0.5, 0.9)) {
+  ensure_julia()
+
   ## deal with input if data frame
   if (inherits(primary, "data.frame")) {
     primary <- data.table::as.data.table(primary)
-    if (is.null(primary$sample)) {
-      if (is.null(samples)) {
-        samples <- 1000
-      }
-      primary <- primary[, .(date, sample = list(1:samples), value)]
-      primary <- primary[,
-        .(sample = as.numeric(unlist(sample))),
-        by = c("date", "value")
-      ]
+    if (!"value" %in% names(primary) && "primary" %in% names(primary)) {
+      primary[, value := primary]
     }
-    primary <- primary[, .(date, sample, value)]
+    primary <- primary[, .(date, value)]
   }
   if (inherits(primary, "estimate_infections")) {
     primary_samples <- get_samples(primary)
-    primary <- primary_samples[variable == primary_variable]
-    primary <- primary[date > max(get_predictions(estimate)$date, na.rm = TRUE)]
-    primary <- primary[, .(date, sample, value)]
-    if (!is.null(samples)) {
-      primary <- primary[sample(.N, samples, replace = TRUE)]
-    }
+    primary_dt <- primary_samples[variable == primary_variable]
+    primary_dt <- primary_dt[
+      date > max(get_predictions(estimate)$date, na.rm = TRUE)
+    ]
+    # Use median of samples per date
+    primary <- primary_dt[, .(value = median(value)), by = date]
   }
-  ## rename to avoid conflict with estimate
-  updated_primary <- primary
 
-  ## extract samples from given stanfit object
-  draws <- extract_samples(estimate$fit,
-    pars = c(
-      "sim_secondary", "log_lik",
-      "lp__", "secondary"
-    ),
-    include = FALSE
-  )
-  # extract data from stanfit
-  stan_data <- estimate$args
-
-  # combined primary from data and input primary
-  predictions <- get_predictions(estimate)
-  predictions <- merge(
-    predictions, estimate$observations, by = "date", all = TRUE
-  )
-  primary_fit <- predictions[
-    ,
-    .(date, value = primary, sample = list(unique(updated_primary$sample)))
-  ]
-  primary_fit <- primary_fit[date <= min(primary$date, na.rm = TRUE)]
-  primary_fit <- primary_fit[,
-    .(sample = as.numeric(unlist(sample))),
-    by = c("date", "value")
-  ]
-  primary_fit <- data.table::rbindlist(
-    list(primary_fit, updated_primary),
-    use.names = TRUE
-  )
-  data.table::setorderv(primary_fit, c("sample", "date"))
-
-  # update data with primary samples and day of week
-  stan_data$primary <- t(
-    matrix(primary_fit$value, ncol = length(unique(primary_fit$sample)))
-  )
-  stan_data$day_of_week <- add_day_of_week(
-    unique(primary_fit$date), stan_data$week_effect
-  )
-  stan_data$n <- nrow(stan_data$primary)
-  stan_data$t <- ncol(stan_data$primary)
-  stan_data$horizon <- nrow(primary[sample == min(sample)])
-
-  # extract samples for posterior of estimates
-  posterior_samples <- sample(stan_data$n, stan_data$n, replace = TRUE)
-  draws <- purrr::map(draws, function(x) as.matrix(x[posterior_samples, ]))
-  # combine with data
-  stan_data <- c(stan_data, draws)
-
-  # allocate empty parameters
-  stan_data <- allocate_empty(
-    stan_data, c("params", "delay_params"),
-    n = stan_data$n
-  )
-  stan_data$all_dates <- as.integer(all_dates)
-
-  ## simulate
-  stan_args <- create_stan_args(
-    stan_opts(
-      model = model, backend = backend, chains = 1, samples = 1, warmup = 1
-    ),
-    data = stan_data, fixed_param = TRUE, model = "simulate_secondary"
-  )
-
-  sims <- fit_model(stan_args, id = "simulate_secondary")
-
-  # extract samples and organise
-  dates <- unique(primary_fit$date)
-  samples <- extract_samples(sims, "sim_secondary")$sim_secondary
-  samples <- as.data.table(samples)
-  colnames(samples) <- c("iterations", "sample", "time", "value")
-  samples <- samples[, c("iterations", "time") := NULL]
-  samples <- samples[
-    ,
-    date := rep(
-      tail(dates, ifelse(all_dates, stan_data$t, stan_data$horizon)),
-      stan_data$n
-    )
-  ]
-
-  # summarise samples
-  summarised <- calc_summary_measures(samples,
-    summarise_by = "date",
+  # Call Julia's forecast_secondary
+  julia_result <- juliaCall(
+    "forecast_secondary",
+    estimate$fit,
+    juliaEval("nothing"), # inf_result not needed here
     CrIs = CrIs
   )
-  summarised <- summarised[, purrr::map(.SD, round, digits = 1)]
 
-  # construct output
+  # Convert to R
+  forecast_dt <- data.table::as.data.table(julia_result)
+  if ("date" %in% names(forecast_dt)) forecast_dt[, date := as.Date(date)]
+
+  # Build output
   out <- list()
-  out$samples <- samples
-  out$forecast <- summarised
-  # link previous prediction observations with forecast observations
-  preds_with_obs <- merge(
-    get_predictions(estimate), estimate$observations, by = "date"
+  out$predictions <- forecast_dt
+  out$samples <- data.table::data.table(
+    variable = character(0), date = as.Date(character(0)),
+    sample = integer(0), value = numeric(0)
   )
-  forecast_obs <- data.table::rbindlist(
-    list(
-      preds_with_obs[, .(date, primary, secondary)],
-      data.table::copy(primary)[, .(primary = median(value)), by = "date"]
-    ),
-    use.names = TRUE, fill = TRUE
-  )
-  data.table::setorderv(forecast_obs, "date")
-  # add in predictions in estimate_secondary format
-  out$predictions <- data.table::merge.data.table(summarised,
-    forecast_obs,
-    by = "date", all = TRUE
-  )
-  data.table::setcolorder(
-    out$predictions, c("date", "primary", "secondary", "mean", "sd")
-  )
-  # Store observations for compatibility with estimate_secondary methods
-  out$observations <- forecast_obs[, .(date, primary, secondary)]
+  out$observations <- estimate$observations
   class(out) <- c("forecast_secondary", class(out))
   out
 }

@@ -49,63 +49,28 @@
 dist_fit <- function(values = NULL, samples = 1000, cores = 1,
                      chains = 2, dist = "exp", verbose = FALSE,
                      backend = "rstan") {
-  # model parameters
-  lows <- values - 1
-  lows <- ifelse(lows <= 0, 1e-6, lows)
-  ups <- values + 1
+  ensure_julia()
 
-  stan_data <- list(
-    N = length(values),
-    low = lows,
-    up = ups,
-    lam_mean = numeric(0),
-    prior_mean = numeric(0),
-    prior_sd = numeric(0),
-    par_sigma = numeric(0)
-  )
-
-  model <- epinow2_stan_model(backend, "dist_fit")
-
-  stan_data <- modifyList(stan_data, switch(dist,
-    exp = list(
-      dist = 0,
-      lam_mean = array(mean(values))
-    ),
-    lognormal = list(
-      dist = 1,
-      prior_mean = array(log(mean(values))),
-      prior_sd = array(log(sd(values)))
-    ),
-    gamma = list(
-      dist = 2,
-      prior_mean = array(mean(values)),
-      prior_sd = array(sd(values)),
-      par_sigma = array(1.0)
-    )
+  # Convert values to Julia DataFrame
+  julia_data <- juliaEval(sprintf(
+    'DataFrame(delay = [%s])',
+    paste(as.numeric(values), collapse = ", ")
   ))
-  # set adapt delta based on the sample size
-  if (length(values) <= 30) {
-    adapt_delta <- 0.999
-  } else {
-    adapt_delta <- 0.9
-  }
 
-  # fit model
-  stan_args <- create_stan_args(
-    stan = stan_opts(
-      model,
-      samples = samples,
-      warmup = 1000,
-      control = list(adapt_delta = adapt_delta),
-      chains = chains,
-      cores = cores
-    ),
-    data = stan_data, verbose = verbose, model = "dist_fit"
+  family <- switch(dist,
+    exp = juliaEval(":exponential"),
+    lognormal = juliaEval(":lognormal"),
+    gamma = juliaEval(":gamma")
   )
 
-  fit <- fit_model(stan_args, id = "dist_fit")
+  # Call Julia's estimate_dist
+  julia_result <- juliaCall(
+    "estimate_dist",
+    julia_data,
+    family = family
+  )
 
-  fit
+  julia_result
 }
 
 
@@ -144,7 +109,6 @@ dist_fit <- function(values = NULL, samples = 1000, cores = 1,
 #'
 #' @return A `<dist_spec>` object summarising the bootstrapped distribution
 #' @importFrom purrr list_transpose
-#' @importFrom rstan extract
 #' @importFrom data.table data.table rbindlist
 #' @importFrom cli cli_abort col_blue
 #' @export
@@ -173,9 +137,9 @@ bootstrapped_dist_fit <- function(values, dist = "lognormal",
       )
     )
   }
-  if (samples < bootstraps) {
-    samples <- bootstraps
-  }
+
+  ensure_julia()
+
   ## Make values integer if not
   values <- as.integer(values)
   ## Remove NA values
@@ -183,61 +147,86 @@ bootstrapped_dist_fit <- function(values, dist = "lognormal",
   ## Filter out negative values
   values <- values[values >= 0]
 
-  get_single_dist <- function(values, samples = 1) {
-    set_dt_single_thread()
-
-    fit <- EpiNow2::dist_fit(values, samples = samples, dist = dist)
-
-    out <- list()
-    if (dist == "lognormal") {
-      out$meanlog <- sample(extract(fit)$mu, samples)
-      out$sdlog <- sample(extract(fit)$sigma, samples)
-    } else if (dist == "gamma") {
-      out$shape <- sample(extract(fit)$alpha, samples)
-      out$rate <- sample(extract(fit)$beta, samples)
-    }
-    out
-  }
-
-  if (bootstraps == 1) {
-    dist_samples <- get_single_dist(values, samples = samples)
-  } else {
-    ## Fit each sub sample
-    dist_samples <- lapply_func(1:bootstraps,
-      function(boot) {
-        get_single_dist(
-          sample(values,
-            min(length(values), bootstrap_samples),
-            replace = TRUE
-          ),
-          samples = ceiling(samples / bootstraps)
-        )
-      },
-      future.opts = list(
-        future.scheduling = Inf,
-        future.globals = c(
-          "values", "bootstraps", "samples",
-          "bootstrap_samples", "get_single_dist"
-        ),
-        future.packages = "data.table",
-        future.seed = TRUE
-      )
-    )
-
-
-    dist_samples <- purrr::list_transpose(dist_samples, simplify = FALSE)
-    dist_samples <- purrr::map(dist_samples, unlist)
-  }
-
-  params <- lapply(dist_samples, function(x) {
-    Normal(mean = mean(x), sd = sd(x))
-  })
-
   if (!missing(max_value)) {
     dist_max <- max_value
   } else {
     dist_max <- max(values)
   }
+
+  # Call Julia's bootstrapped_dist_fit
+  julia_data <- juliaEval(sprintf(
+    'DataFrame(delay = [%s])',
+    paste(as.numeric(values), collapse = ", ")
+  ))
+
+  family <- switch(dist,
+    lognormal = juliaEval(":lognormal"),
+    gamma = juliaEval(":gamma")
+  )
+
+  julia_result <- juliaCall(
+    "bootstrapped_dist_fit", julia_data,
+    family = family,
+    max_delay = as.integer(dist_max),
+    n_bootstraps = as.integer(bootstraps)
+  )
+
+  # Extract the parameter priors from the UncertainDistribution
+  param_priors <- juliaEval(
+    'let ud = _bootstrapped_result
+      [(string(typeof(p)), Distributions.mean(p), Distributions.std(p))
+       for p in ud.param_priors]
+    end'
+  )
+
+  # Build dist_spec from the bootstrap results
+  if (dist == "lognormal") {
+    # UncertainDistribution has priors on (meanlog, sdlog)
+    meanlog_mean <- juliaCall("Distributions.mean",
+      juliaCall("getindex",
+        juliaCall("getfield", julia_result,
+          juliaEval(":param_priors")), 1L))
+    meanlog_sd <- juliaCall("Distributions.std",
+      juliaCall("getindex",
+        juliaCall("getfield", julia_result,
+          juliaEval(":param_priors")), 1L))
+    sdlog_mean <- juliaCall("Distributions.mean",
+      juliaCall("getindex",
+        juliaCall("getfield", julia_result,
+          juliaEval(":param_priors")), 2L))
+    sdlog_sd <- juliaCall("Distributions.std",
+      juliaCall("getindex",
+        juliaCall("getfield", julia_result,
+          juliaEval(":param_priors")), 2L))
+
+    params <- list(
+      meanlog = Normal(mean = meanlog_mean, sd = meanlog_sd),
+      sdlog = Normal(mean = sdlog_mean, sd = sdlog_sd)
+    )
+  } else {
+    shape_mean <- juliaCall("Distributions.mean",
+      juliaCall("getindex",
+        juliaCall("getfield", julia_result,
+          juliaEval(":param_priors")), 1L))
+    shape_sd <- juliaCall("Distributions.std",
+      juliaCall("getindex",
+        juliaCall("getfield", julia_result,
+          juliaEval(":param_priors")), 1L))
+    scale_mean <- juliaCall("Distributions.mean",
+      juliaCall("getindex",
+        juliaCall("getfield", julia_result,
+          juliaEval(":param_priors")), 2L))
+    scale_sd <- juliaCall("Distributions.std",
+      juliaCall("getindex",
+        juliaCall("getfield", julia_result,
+          juliaEval(":param_priors")), 2L))
+
+    params <- list(
+      shape = Normal(mean = shape_mean, sd = shape_sd),
+      rate = Normal(mean = 1.0 / scale_mean, sd = scale_sd / scale_mean^2)
+    )
+  }
+
   new_dist_spec(params = params, max = dist_max, distribution = dist)
 }
 

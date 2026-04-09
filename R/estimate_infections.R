@@ -62,13 +62,6 @@
 #' @seealso [get_samples()] [get_predictions()] [get_parameters()]
 #' [epinow()] [regional_epinow()] [forecast_infections()]
 #' [estimate_truncation()]
-#' @inheritParams create_stan_args
-#' @inheritParams create_stan_data
-#' @inheritParams create_rt_data
-#' @inheritParams create_backcalc_data
-#' @inheritParams create_gp_data
-#' @inheritParams create_obs_model
-#' @inheritParams fit_model_with_nuts
 #' @importFrom data.table data.table copy merge.data.table as.data.table
 #' @importFrom data.table setorder rbindlist melt .N setDT
 #' @importFrom lubridate days
@@ -159,80 +152,50 @@ estimate_infections <- function(data,
     )
   }
 
-  ## add forecast horizon if forecasting is required
-  model_data <- data
-  if (forecast$horizon > 0) {
-    horizon_args <- list(
-      data = model_data,
-      horizon = forecast$horizon
-    )
-    if (!is.null(forecast$accumulate)) {
-      horizon_args$accumulate <- forecast$accumulate
-    }
-    model_data <- do.call(add_horizon, horizon_args)
-  }
+  # Ensure Julia backend is ready
+  ensure_julia()
 
-  # Add breakpoints column
-  model_data <- add_breakpoints(model_data)
+  # Convert data to Julia DataFrame
+  julia_data <- r_data_to_julia(data)
 
-  # Determine seeding time
-  seeding_time <- get_seeding_time(delays, generation_time, rt)
+  # Convert all opts to Julia equivalents
+  julia_gt <- r_gt_opts_to_julia(generation_time)
+  julia_delays <- r_delay_opts_to_julia(delays)
+  julia_trunc <- r_trunc_opts_to_julia(truncation)
+  julia_rt <- r_rt_opts_to_julia(rt)
+  julia_backcalc <- r_backcalc_opts_to_julia(backcalc)
+  julia_gp <- r_gp_opts_to_julia(gp)
+  julia_obs <- r_obs_opts_to_julia(obs)
+  julia_forecast <- r_forecast_opts_to_julia(forecast)
+  julia_inference <- stan_opts_to_inference_opts(stan)
 
-  # Add initial zeroes
-  model_data <- pad_reported_cases(model_data, seeding_time)
-
-  params <- list(
-    make_param("alpha", gp$alpha, lower_bound = 0),
-    make_param("rho", gp$ls, lower_bound = 0),
-    make_param("R0", rt$prior, lower_bound = 0),
-    make_param("fraction_observed", obs$scale, lower_bound = 0),
-    make_param("reporting_overdispersion", obs$dispersion, lower_bound = 0),
-    make_param("pop", rt$pop, lower_bound = 0)
-  )
-
-  # Define stan model parameters
-  stan_data <- create_stan_data(
-    model_data,
-    seeding_time = seeding_time,
-    rt = rt,
-    gp = gp,
-    obs = obs,
-    backcalc = backcalc,
-    forecast = forecast,
-    params = params
-  )
-
-  stan_data <- c(stan_data, create_stan_delays(
-    generation_time = generation_time,
-    reporting = delays,
-    truncation = truncation,
-    time_points = stan_data$t - stan_data$seeding_time - stan_data$horizon
-  ))
-
-  # Set up default settings
-  stan_args <- create_stan_args(
-    stan = stan,
-    data = stan_data,
-    init = create_initial_conditions(stan_data, params),
+  # Call Julia's estimate_infections
+  julia_result <- juliaCall(
+    "estimate_infections",
+    julia_data,
+    generation_time = julia_gt,
+    delays = julia_delays,
+    truncation = julia_trunc,
+    rt = julia_rt,
+    backcalc = julia_backcalc,
+    gp = julia_gp,
+    obs = julia_obs,
+    forecast = julia_forecast,
+    inference = julia_inference,
     verbose = verbose
   )
 
-  # Warn if truncation distribution is longer than observed time
-  check_truncation_length(
-    stan_args,
-    time_points = stan_data$t - stan_data$seeding_time - stan_data$horizon
-  )
-
-  # Fit model
-  fit <- fit_model(stan_args, id = id)
+  seeding_time <- get_seeding_time(delays, generation_time, rt)
 
   ret <- list(
-    fit = fit,
-    args = stan_data,
+    fit = julia_result,
+    args = list(
+      horizon = forecast$horizon,
+      seeding_time = seeding_time
+    ),
     observations = data
   )
 
-  ## Join stan fit if required
   class(ret) <- c("estimate_infections", "epinowfit", class(ret))
   ret
 }

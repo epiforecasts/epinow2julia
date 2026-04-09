@@ -98,7 +98,7 @@ Authors@R:
     )
 Description: Estimates the time-varying reproduction number, rate of
     spread, and doubling time using a renewal equation approach combined
-    with Bayesian inference via Stan. Supports Gaussian process and
+    with Bayesian inference via Julia/Turing.jl. Supports Gaussian process and
     random walk priors for modelling changes in
     transmission over time. Accounts for delays between infection and
     observation (incubation period, reporting delays), right-truncation
@@ -121,25 +121,20 @@ Imports:
     data.table (>= 1.15.0),
     futile.logger (>= 1.4),
     ggplot2,
+    JuliaConnectoR,
     lifecycle,
     lubridate,
-    methods,
     patchwork,
-    posterior,
     primarycensored,
     purrr,
     R.utils (>= 2.0.0),
-    Rcpp (>= 0.12.0),
     rlang (>= 0.4.7),
-    rstan (>= 2.26.0),
-    rstantools (>= 2.2.0),
     runner,
     scales,
     stats,
     truncnorm,
     utils
 Suggests:
-    cmdstanr,
     future,
     future.apply,
     knitr,
@@ -150,16 +145,9 @@ Suggests:
     spelling,
     testthat,
     withr
-LinkingTo:
-    BH (>= 1.66.0),
-    Rcpp (>= 0.12.0),
-    RcppEigen (>= 0.3.3.3.0),
-    RcppParallel (>= 5.0.1),
-    rstan (>= 2.26.0),
-    StanHeaders (>= 2.26.0)
 Additional_repositories:
     https://production.r-multiverse.org/2025-12-15
-Biarch: true
+Biarch: false
 Config/testthat/edition: 3
 Config/Needs/dev:
     covr,
@@ -176,6 +164,5 @@ Language: en-GB
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-SystemRequirements: GNU make
-       C++17
+SystemRequirements: Julia (>= 1.10)
 VignetteBuilder: knitr

@@ -1,4 +1,5 @@
 skip_on_cran()
+skip_if_no_julia()
 
 # Uses shared fixtures from setup.R (regional_epinow run once)
 # Core tests always run; variant tests gated with skip_integration()

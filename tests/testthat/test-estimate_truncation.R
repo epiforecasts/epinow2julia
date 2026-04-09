@@ -1,3 +1,4 @@
+skip_if_no_julia()
 # Setup for testing -------------------------------------------------------
 skip_on_cran()
 

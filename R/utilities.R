@@ -138,40 +138,6 @@ R_to_growth <- function(R, gamma_mean, gamma_sd) {
 
 #' Allocate Delays into Required Stan Format
 #'
-#' @description `r lifecycle::badge("stable")`
-#' Allocate delays for stan. Used in [delay_opts()].
-#' @param delay_var List of numeric delays
-#' @param no_delays Numeric, number of delays
-#' @return A numeric array
-#' @keywords internal
-allocate_delays <- function(delay_var, no_delays) {
-  if (no_delays > 0) {
-    out <- unlist(delay_var)
-  } else {
-    out <- numeric(0)
-  }
-  array(out)
-}
-
-#' Allocate Empty Parameters to a List
-#'
-#' @description `r lifecycle::badge("stable")`
-#' Allocate missing parameters to be empty two dimensional arrays. Used
-#' internally by [forecast_infections()].
-#' @param data A list of parameters
-#' @param params A character vector of parameters to allocate to
-#' empty if missing.
-#' @param n Numeric, number of samples to assign an empty array
-#' @return A list of parameters some allocated to be empty
-#' @keywords internal
-allocate_empty <- function(data, params, n = 0) {
-  for (param in params) {
-    if (!exists(param, data)) {
-      data[[param]] <- array(0, dim = c(n, 0))
-    }
-  }
-  data
-}
 #' Match User Supplied Arguments with Supported Options
 #'
 #' @description `r lifecycle::badge("stable")`
@@ -245,22 +211,16 @@ match_output_arguments <- function(input_args = NULL,
 #'
 #' @return No return value, called for side effects
 #' @export
-#' @importFrom rstan expose_stan_functions stanc
 #' @importFrom purrr map_chr
 expose_stan_fns <- function(files, target_dir, ...) {
-  functions <- paste0(
-    "\n functions{ \n",
-    paste(
-      purrr::map_chr(
-        files,
-        ~ paste(readLines(file.path(target_dir, .)), collapse = "\n")
-      ),
-      collapse = "\n"
-    ),
-    "\n }"
+  lifecycle::deprecate_stop(
+    "2.0.0",
+    "expose_stan_fns()",
+    details = paste(
+      "Stan is no longer used as the backend.",
+      "Use JuliaConnectoR::juliaCall() to call Julia functions directly."
+    )
   )
-  rstan::expose_stan_functions(rstan::stanc(model_code = functions), ...)
-  invisible(NULL)
 }
 
 #' Convert mean and sd to log mean for a log normal distribution
@@ -462,23 +422,6 @@ stable_convolve <- function(a, b) {
     }
   }
   result
-}
-
-##' Internal function to create a parameter list
-##'
-##' @param name Character, name of the parameter
-##' @param dist `<dist_spec>`, the distribution of the parameter; default: NULL
-##' @param lower_bound Numeric, lower bound for the parameter; default: -Inf
-##' @return A list with the parameter details, classed as "EpiNow2.param"
-##' @keywords internal
-make_param <- function(name, dist = NULL, lower_bound = -Inf) {
-  params <- list(
-    name = name,
-    dist = dist,
-    lower_bound = lower_bound
-  )
-  class(params) <- c("EpiNow2.param", "list")
-  params
 }
 
 #' @importFrom stats glm median na.omit pexp pgamma plnorm quasipoisson rexp

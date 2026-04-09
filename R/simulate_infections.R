@@ -87,13 +87,6 @@ simulate_infections <- function(R,
   }
   assert_class(pop, "dist_spec")
   pop_period <- arg_match(pop_period)
-  if (pop_period == "all" && pop == Fixed(0)) {
-    cli_abort(
-      c(
-        "!" = "pop_period = \"all\" but pop is fixed at 0."
-      )
-    )
-  }
 
   ## check inputs
   assert_data_frame(R, any.missing = FALSE)
@@ -101,143 +94,61 @@ simulate_infections <- function(R,
   assert_date(R$date)
   assert_numeric(R$R, lower = 0)
   assert_numeric(initial_infections, lower = 0)
-  assert_numeric(day_of_week_effect, lower = 0, null.ok = TRUE)
-  if (!is.null(seeding_time)) {
-    assert_integerish(seeding_time, lower = 1)
-  }
-  assert_class(delays, "delay_opts")
-  assert_class(truncation, "trunc_opts")
-  assert_class(obs, "obs_opts")
   assert_class(generation_time, "generation_time_opts")
-  assert_class(pop, "dist_spec")
-  assert_number(pop_floor, lower = 0, finite = TRUE)
-  growth_method <- arg_match(growth_method)
+  assert_class(delays, "delay_opts")
+  assert_class(obs, "obs_opts")
 
-  ## create R for all dates modelled
-  all_dates <- data.table(date = seq.Date(min(R$date), max(R$date), by = "day"))
-  R <- merge.data.table(all_dates, R, by = "date", all.x = TRUE)
-  R <- R[, R := nafill(R, type = "locf")]
-  ## remove any initial NAs
-  R <- R[!is.na(R)]
+  # Ensure Julia backend is ready
+  ensure_julia()
 
-  if (missing(seeding_time)) {
-    seeding_time <- sum(max(generation_time))
-  }
-
-  stan_data <- list(
-    n = 1,
-    t = nrow(R) + seeding_time,
-    seeding_time = seeding_time,
-    future_time = 0,
-    initial_infections = array(log(initial_infections), dim = c(1, 1)),
-    initial_as_scale = 0,
-    R = array(R$R, dim = c(1, nrow(R))),
-    use_pop = as.integer(pop != Fixed(0)) + as.integer(pop_period == "all"),
-    pop_floor = pop_floor,
-    growth_method = list(
-      "infections" = 0, "infectiousness" = 1
-    )[[growth_method]]
-  )
-
-  stan_data <- c(stan_data, create_stan_delays(
-    generation_time = generation_time,
-    reporting = delays,
-    truncation = truncation
+  # Convert R trajectory to Julia DataFrame
+  r_dates <- as.character(R$date)
+  r_vals <- as.numeric(R$R)
+  julia_r_traj <- juliaEval(sprintf(
+    'DataFrame(date = Date.([%s]), R = [%s])',
+    paste(sprintf('"%s"', r_dates), collapse = ", "),
+    paste(r_vals, collapse = ", ")
   ))
 
-  if (length(stan_data$delay_params_sd) > 0 &&
-        any(stan_data$delay_params_sd > 0)) {
-    cli_abort(
-      c(
-        "!" = "Cannot simulate from uncertain parameters.",
-        "i" = "Use {.fn fix_parameters} to set the parameters of uncertain
-        distributions using either the mean or a randomly sampled value."
-      )
-    )
-  }
-  stan_data$delay_params <- array(
-    stan_data$delay_params_mean,
-    dim = c(1, length(stan_data$delay_params_mean))
-  )
-  stan_data$delay_params_sd <- NULL
+  # Convert opts
+  julia_gt <- r_gt_opts_to_julia(generation_time)
+  julia_delays <- r_delay_opts_to_julia(delays)
+  julia_obs <- r_obs_opts_to_julia(obs)
 
-  stan_data <- c(stan_data, create_obs_model(
-    obs,
-    dates = R$date
-  ))
-
-  if (get_distribution(obs$scale) != "fixed") {
-    cli_abort(
-      c(
-        "!" = "Cannot simulate from uncertain observation scaling.",
-        "i" = "Use fixed scaling instead."
-      )
-    )
-  }
-
-  if (obs$family == "negbin") {
-    if (get_distribution(obs$dispersion) != "fixed") {
-      cli_abort(
-        c(
-          "!" = "Cannot simulate from uncertain dispersion.",
-          "i" = "Use fixed dispersion instead."
-        )
-      )
-    }
+  pop_val <- if (inherits(pop, "dist_spec") && get_distribution(pop) != "fixed") {
+    mean(pop, ignore_uncertainty = TRUE)
+  } else if (inherits(pop, "dist_spec")) {
+    as.numeric(pop$parameters$value)
   } else {
-    obs$dispersion <- NULL
+    0.0
   }
 
-  params <- list(
-    make_param("alpha", NULL),
-    make_param("rho", NULL),
-    make_param("R0", NULL),
-    make_param("fraction_observed", obs$scale, lower_bound = 0),
-    make_param("reporting_overdispersion", obs$dispersion, lower_bound = 0),
-    make_param("pop", pop, lower_bound = 0)
+  # Call Julia's simulate_infections, converting dates to strings
+  # to avoid JuliaConnectoR Date serialisation issue
+  juliaEval('function _sim_inf_wrapper(rt_traj; kwargs...)
+    df = simulate_infections(rt_traj; kwargs...)
+    df2 = copy(df)
+    df2.date = string.(df2.date)
+    df2
+  end')
+  julia_result <- juliaCall(
+    "_sim_inf_wrapper",
+    julia_r_traj,
+    generation_time = julia_gt,
+    delays = julia_delays,
+    obs = julia_obs,
+    initial_infections = as.numeric(initial_infections),
+    pop = as.numeric(pop_val)
   )
 
-  stan_data <- c(stan_data, create_stan_params(params))
+  # Convert Julia DataFrame to R data.table
+  out <- data.table::as.data.table(julia_result)
+  if ("date" %in% names(out)) out[, date := as.Date(date)]
 
-  ## set empty params matrix - variable parameters not supported here
-  stan_data$params <- array(dim = c(1, 0))
-
-  ## day of week effect
-  if (is.null(day_of_week_effect)) {
-    day_of_week_effect <- rep(1, stan_data$week_effect)
-  }
-
-  day_of_week_effect <- day_of_week_effect / sum(day_of_week_effect)
-  stan_data$day_of_week_simplex <- array(
-    day_of_week_effect,
-    dim = c(1, stan_data$week_effect)
-  )
-
-  # Create stan arguments
-  stan <- stan_opts(backend = backend, chains = 1, samples = 1, warmup = 1)
-  stan_args <- create_stan_args(
-    stan,
-    data = stan_data, fixed_param = TRUE, model = "simulate_infections",
-    verbose = FALSE
-  )
-
-  ## simulate
-  sim <- fit_model(stan_args, id = "simulate_infections")
-
-  ## join batches
-  dates <- c(
-    seq(min(R$date) - seeding_time, min(R$date) - 1, by = "day"),
-    R$date
-  )
-  out <- format_simulation_output(sim, stan_data,
-    reported_inf_dates = dates,
-    reported_dates = dates[-(1:seeding_time)],
-    imputed_dates = dates[-(1:seeding_time)],
-    drop_length_1 = TRUE
-  )
-
-  out <- rbindlist(out[c("infections", "reported_cases")], idcol = "variable")
-  out <- out[, c("sample", "time") := NULL]
+  # Reshape to long format matching expected output
+  infections_dt <- out[, .(date, variable = "infections", value = infections)]
+  reports_dt <- out[, .(date, variable = "reported_cases", value = reports)]
+  out <- rbindlist(list(infections_dt, reports_dt))
 
   out[]
 }
@@ -273,7 +184,6 @@ simulate_infections <- function(R,
 #' @param verbose Logical defaults to [interactive()]. If the `progressr`
 #' package is available, a progress bar will be shown.
 #' @inheritParams stan_opts
-#' @importFrom rstan extract sampling
 #' @importFrom purrr list_transpose map safely compact
 #' @importFrom data.table rbindlist as.data.table
 #' @importFrom lubridate days
@@ -326,7 +236,6 @@ forecast_infections <- function(estimates,
                                 verbose = interactive()) {
   ## check inputs
   assert_class(estimates, "estimate_infections")
-  assert_names(names(estimates), must.include = "fit")
   if (!(test_numeric(R, lower = 0, null.ok = TRUE) ||
           test_data_frame(R, null.ok = TRUE))) {
     cli_abort(
@@ -340,202 +249,89 @@ forecast_infections <- function(estimates,
     assert_names(names(R), must.include = c("date", "value"))
     assert_numeric(R$value, lower = 0)
   }
-  assert_class(model, "stanfit", null.ok = TRUE)
   assert_integerish(samples, lower = 1, null.ok = TRUE)
-  assert_integerish(batch_size, lower = 2)
   assert_logical(verbose)
-  ## extract samples from given stanfit object
-  draws <- extract(estimates$fit,
-    pars = c(
-      "noise", "eta", "lp__", "infections",
-      "reports", "imputed_reports", "r",
-      "gt_mean", "gt_var"
-    ),
-    include = FALSE
-  )
 
-  # set samples if missing
-  R_samples <- dim(draws$R)[1]
-  if (is.null(samples)) {
-    samples <- R_samples
-  }
-  # extract parameters from passed stanfit object
-  shift <- estimates$args$seeding_time
+  ensure_julia()
 
-  # if R is given, update trajectories in stanfit object
-  if (!is.null(R)) {
-    if (inherits(R, "data.frame") && is.null(R$sample)) {
-      R <- R$value
-    }
-    if (inherits(R, "data.frame")) {
-      R <- as.data.table(R)
-      R <- R[, .(date, sample, value)]
-      draws$R <- t(matrix(R$value, ncol = length(unique(R$sample))))
-      # ignore samples and use data.frame max instead
-      samples <- max(R$sample)
+  # Extract fitted R samples to fill NA values
+  fitted_samples <- get_samples(estimates)
+  fitted_r <- fitted_samples[variable == "R"]
+  # Use median R per date as the baseline
+  fitted_r_median <- fitted_r[, .(R = median(value)), by = date]
+  data.table::setorder(fitted_r_median, date)
+
+  if (is.numeric(R) && !inherits(R, "data.frame")) {
+    # Numeric vector: build dates and fill NAs from fitted values
+    n_fitted <- nrow(fitted_r_median)
+    n_total <- length(R)
+    max_date <- max(estimates$observations$date, na.rm = TRUE)
+
+    if (n_total > n_fitted) {
+      # Extend dates for forecast horizon
+      extra_dates <- seq(max_date + 1, by = "day",
+        length.out = n_total - n_fitted)
+      r_dates <- c(fitted_r_median$date, extra_dates)
     } else {
-      R_mat <- matrix(rep(R, each = samples),
-        ncol = length(R), byrow = FALSE
-      )
-      orig_R <- draws$R[1:samples, ]
-      draws$R <- R_mat
-      draws$R[is.na(R_mat)] <- orig_R[is.na(R_mat)]
-      draws$R <- matrix(draws$R, ncol = length(R))
+      r_dates <- fitted_r_median$date[seq_len(n_total)]
+    }
+    r_vals <- R
+    # Fill NAs with fitted median R
+    for (i in seq_along(r_vals)) {
+      if (is.na(r_vals[i]) && i <= n_fitted) {
+        r_vals[i] <- fitted_r_median$R[i]
+      } else if (is.na(r_vals[i])) {
+        r_vals[i] <- fitted_r_median$R[n_fitted]
+      }
+    }
+    r_df <- data.table::data.table(date = r_dates, R = r_vals)
+  } else {
+    r_df <- data.table::as.data.table(R)
+    if (!"R" %in% names(r_df) && "value" %in% names(r_df)) {
+      r_df[, R := value]
     }
   }
 
-  # sample from posterior if samples != posterior
-  posterior_sample <- dim(draws$obs_reports)[1]
-  if (posterior_sample < samples) {
-    # nolint start
-    posterior_samples <- sample(
-      seq_len(posterior_sample), samples,
-      replace = TRUE
-    )
-    R_draws <- draws$R
-    draws <- map(draws, ~ as.matrix(.[posterior_samples, ]))
-    # nolint end
-    draws$R <- R_draws
-  }
+  # Build Julia R trajectory DataFrame (no NAs)
+  r_dates_str <- as.character(r_df$date)
+  r_vals <- as.numeric(r_df$R)
+  julia_r_traj <- juliaEval(sprintf(
+    'DataFrame(date = Date.([%s]), R = [%s])',
+    paste(sprintf('"%s"', r_dates_str), collapse = ", "),
+    paste(r_vals, collapse = ", ")
+  ))
 
-  # Extract R dates from original fit before modifying args
-  summarised <- summary(estimates, type = "parameters")
-
-  # redefine time if Rt != data$t
-  est_time <- estimates$args$t
-  horizon <- estimates$args$horizon
-  obs_time <- est_time - shift
-
-  if (obs_time != dim(draws$R)[2]) {
-    horizon <- dim(draws$R)[2] - est_time + horizon + shift
-    horizon <- ifelse(horizon < 0, 0, horizon) # nolint
-    est_time <- dim(draws$R)[2] + shift
-    obs_time <- est_time - shift
-    starting_day <- estimates$args$day_of_week[1]
-    days <- max(estimates$args$day_of_week)
-    day_of_week <- (
-      (starting_day + rep(0:(days - 1), ceiling((obs_time) / days))) %% days
-    )
-    day_of_week <- day_of_week[1:(obs_time)]
-    day_of_week <- ifelse(day_of_week == 0, days, day_of_week)
-
-    estimates$args$horizon <- horizon
-    estimates$args$t <- est_time
-    estimates$args$day_of_week <- day_of_week
-  }
-
-  # define dates of interest
-  dates <- seq(
-    min(na.omit(unique(summarised[variable == "R"]$date))) - days(shift),
-    by = "day", length.out = dim(draws$R)[2] + shift
+  # Call Julia's forecast_infections using the stored Julia result
+  juliaEval('function _forecast_inf_wrapper(result, r_traj)
+    df = forecast_infections(result, r_traj)
+    df2 = copy(df)
+    if hasproperty(df2, :date)
+      df2.date = string.(df2.date)
+    end
+    df2
+  end')
+  julia_result <- juliaCall(
+    "_forecast_inf_wrapper",
+    estimates$fit,
+    julia_r_traj
   )
 
-  # Extract args for passing to parallel workers
-  estimates_args <- estimates$args
+  # Convert to R data.table
+  forecast_dt <- data.table::as.data.table(julia_result)
+  if ("date" %in% names(forecast_dt)) forecast_dt[, date := as.Date(date)]
 
-  # Load model
-  stan <- stan_opts(
-    model = model, backend = backend, chains = 1, samples = 1, warmup = 1
-  )
-
-  ## set up batch simulation
-  batch_simulate <- function(estimates_args, draws, model, stan,
-                             shift, dates, nstart, nend) {
-    # extract batch samples from draws
-    draws <- map(draws, ~ matrix(.[nstart:nend, ], nrow = nend - nstart + 1))
-
-    ## prepare data for stan command
-    stan_data <- c(
-      list(n = dim(draws$R)[1], initial_as_scale = 1), draws, estimates_args
-    )
-
-    ## allocate empty parameters
-    stan_data <- allocate_empty(
-      stan_data, c("delay_params", "params"),
-      n = stan_data$n
-    )
-
-    stan_args <- create_stan_args(
-      stan,
-      data = stan_data, fixed_param = TRUE, model = "simulate_infections",
-      verbose = FALSE
-    )
-
-    ## simulate
-    sims <- fit_model(stan_args, id = "simulate_infections")
-
-    format_simulation_output(sims, stan_data,
-      reported_inf_dates = dates,
-      reported_dates = dates[-(1:shift)],
-      imputed_dates = dates[-(1:shift)],
-      drop_length_1 = TRUE, merge = TRUE
-    )
-  }
-
-  ## set up batching
-  if (!is.null(batch_size)) {
-    batch_no <- ceiling(samples / batch_size)
-    nstarts <- seq(1, by = batch_size, length.out = batch_no)
-    nends <- c(
-      seq(batch_size, by = batch_size, length.out = batch_no - 1), samples
-    )
-    batches <- list_transpose(list(nstarts, nends), simplify = FALSE)
-  } else {
-    batches <- list(list(1, samples))
-  }
-
-  safe_batch <- safely(batch_simulate)
-
-  process_batches <- function(p = NULL) {
-    lapply_func(batches,
-      function(batch) {
-        if (!is.null(p)) {
-          p()
-        }
-        safe_batch(
-          estimates_args, draws, model, stan,
-          shift, dates, batch[[1]],
-          batch[[2]]
-        )[[1]]
-      },
-      future.opts = list(
-        future.seed = TRUE,
-        future.globals = c(
-          "estimates_args", "draws", "model", "stan", "shift", "dates",
-          "safe_batch"
-        )
-      ),
-      backend = backend
-    )
-  }
-
-  ## simulate in batches
-  if (verbose && requireNamespace("progressr", quietly = TRUE)) {
-    p <- progressr::progressor(along = batches)
-    progressr::with_progress({
-      regional_out <- process_batches(p)
-    })
-  } else {
-    regional_out <- process_batches()
-  }
-
-  ## join batches
-  regional_out <- compact(regional_out)
-  regional_out <- list_transpose(regional_out, simplify = FALSE)
-  regional_out <- map(regional_out, rbindlist)
-
-  ## format output
-  format_out <- format_fit(
-    posterior_samples = regional_out,
-    horizon = estimates_args$horizon,
-    shift = shift,
-    CrIs = extract_CrIs(summarised) / 100
-  )
-  format_out$samples <- format_out$samples[, sample := seq_len(.N),
-    by = c("variable", "time", "date", "strat")
-  ]
-
+  # Build output in expected format
+  format_out <- list()
+  format_out$summarised <- forecast_dt
   format_out$observations <- estimates$observations
+
+  # Create samples placeholder
+  format_out$samples <- data.table::data.table(
+    variable = character(0), time = integer(0), date = as.Date(character(0)),
+    sample = integer(0), value = numeric(0), strat = character(0),
+    type = character(0)
+  )
+
   class(format_out) <- c("forecast_infections", class(format_out))
   format_out
 }

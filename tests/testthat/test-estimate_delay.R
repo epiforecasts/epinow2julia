@@ -1,4 +1,5 @@
 skip_on_cran()
+skip_if_no_julia()
 
 # Integration tests (MCMC-based) ------------------------------------------
 # These tests run actual MCMC sampling and are slow. Tests are divided into:

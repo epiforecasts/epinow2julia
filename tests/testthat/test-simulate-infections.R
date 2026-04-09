@@ -1,4 +1,5 @@
 skip_on_cran()
+skip_if_no_julia()
 
 R <- data.frame(
   date = seq.Date(as.Date("2023-01-01"), length.out = 14, by = "day"),

@@ -1,4 +1,5 @@
 skip_on_cran()
+skip_if_no_julia()
 
 # set example reporting delay
 reporting_delay <- LogNormal(

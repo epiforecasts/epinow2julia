@@ -1,4 +1,5 @@
 skip_on_cran()
+skip_if_no_julia()
 
 cases <- as.data.table(example_confirmed)[, primary := confirm]
 test_simulate_secondary <- function(obs = obs_opts(family = "poisson"), ...) {
