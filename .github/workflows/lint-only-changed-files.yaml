@@ -27,7 +27,6 @@ jobs:
           extra-packages: |
             here
             usethis
-            any::cmdstanr
             any::gh
             any::lintr
             any::purrr

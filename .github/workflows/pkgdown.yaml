@@ -34,7 +34,6 @@ jobs:
           extra-packages:
             any::pkgdown
             local::.
-            any::cmdstanr
           needs: website
 
       - name: Build site
