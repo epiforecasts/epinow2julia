@@ -3,7 +3,7 @@
 > **This is an experimental rewrite of
 > [EpiNow2](https://github.com/epiforecasts/EpiNow2) that replaces all
 > internal Stan models with calls to
-> [EpiNow2.jl](https://github.com/epiforecasts/epinow2.jl), a Julia
+> [EpiNow2.jl](https://github.com/sbfnk/EpiNow2.jl), a Julia
 > implementation using [Turing.jl](https://turinglang.org/) for Bayesian
 > inference.** It is not yet released and is under active development.
 > See the [feature status](#feature-status) below.
@@ -56,7 +56,7 @@ pak::pkg_install("epiforecasts/epinow2julia")
 ### Requirements
 
 - [Julia](https://julialang.org/downloads/) >= 1.10
-- The [EpiNow2.jl](https://github.com/epiforecasts/epinow2.jl) Julia
+- The [EpiNow2.jl](https://github.com/sbfnk/EpiNow2.jl) Julia
   package (installed in a local project)
 
 ### Julia setup
@@ -65,7 +65,7 @@ pak::pkg_install("epiforecasts/epinow2julia")
 
 2. Clone and set up the Julia package:
    ```bash
-   git clone https://github.com/epiforecasts/epinow2.jl.git
+   git clone https://github.com/sbfnk/EpiNow2.jl.git
    cd epinow2.jl
    julia --project -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'
    ```
