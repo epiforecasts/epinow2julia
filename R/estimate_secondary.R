@@ -238,9 +238,8 @@ estimate_secondary <- function(data,
 #'   `<data.frame>` should have the following variables: `variable`, `mean`, and
 #'   `sd`.
 #'
-#' @return A list as produced by `create_stan_data()`.
+#' @return A list of updated data.
 #' @export
-#' @inheritParams create_stan_args
 #' @importFrom data.table as.data.table
 #' @importFrom cli cli_inform cli_warn
 #' @examples
@@ -543,7 +542,6 @@ convolve_and_scale <- function(data, type = c("incidence", "prevalence"),
 #' of forecast secondary observation posterior samples, and `forecast` a summary
 #' of the forecast secondary observation posterior.
 #'
-#' @importFrom rstan extract sampling
 #' @importFrom data.table rbindlist merge.data.table as.data.table setorderv
 #' @importFrom data.table setcolorder copy
 #' @importFrom lubridate days wday

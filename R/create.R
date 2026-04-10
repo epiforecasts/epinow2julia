@@ -40,7 +40,6 @@ get_accumulate <- function(data) {
 #' @param shift Numeric, mean delay shift to apply.
 #'
 #' @inheritParams estimate_infections
-#' @inheritParams create_stan_data
 #' @importFrom data.table copy shift frollmean fifelse .N
 #' @importFrom stats lm
 #' @importFrom runner mean_run

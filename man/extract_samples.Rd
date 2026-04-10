@@ -2,13 +2,13 @@
 % Please edit documentation in R/extract.R
 \name{extract_samples}
 \alias{extract_samples}
-\title{Extract all samples from a stan fit}
+\title{Extract all samples from a fitted model}
 \usage{
 extract_samples(stan_fit, pars = NULL, include = TRUE)
 }
 \arguments{
-\item{stan_fit}{A \verb{<stanfit>} or \verb{<CmdStanMCMC>} object as returned by
-\code{\link[=fit_model]{fit_model()}}.}
+\item{stan_fit}{A Julia result object (from the Julia backend) or a
+legacy stanfit object.}
 
 \item{pars}{Any selection of parameters to extract}
 
@@ -19,7 +19,7 @@ extract_samples(stan_fit, pars = NULL, include = TRUE)
 List of data.tables with samples
 }
 \description{
-If the \code{object} argument is a \verb{<stanfit>} object, it simply returns the
-result of \code{\link[rstan:stanfit-method-extract]{rstan::extract()}}. If it is a \verb{<CmdStanMCMC>} it returns samples
-in the same format as \code{\link[rstan:stanfit-method-extract]{rstan::extract()}} does for \verb{<stanfit>} objects.
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
+Extracts posterior samples from a fitted model object. For Julia-backed
+fits, this calls Julia's \code{get_samples()} and converts the result.
 }

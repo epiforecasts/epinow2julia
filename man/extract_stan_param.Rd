@@ -2,7 +2,7 @@
 % Please edit documentation in R/extract.R
 \name{extract_stan_param}
 \alias{extract_stan_param}
-\title{Extract a parameter summary from a Stan object}
+\title{Extract a parameter summary from a fitted model}
 \usage{
 extract_stan_param(
   fit,
@@ -12,25 +12,18 @@ extract_stan_param(
 )
 }
 \arguments{
-\item{fit}{A \verb{<stanfit>} objec.}
+\item{fit}{A Julia result object.}
 
-\item{params}{A character vector of parameters to extract. Defaults to all
-parameters.}
+\item{params}{A character vector of parameters to extract.}
 
 \item{CrIs}{Numeric vector of credible intervals to calculate.}
 
-\item{var_names}{Logical defaults to \code{FALSE}. Should variables be named.
-Automatically set to TRUE if multiple parameters are to be extracted.}
+\item{var_names}{Logical defaults to \code{FALSE}. Should variables be named.}
 }
 \value{
-A \verb{<data.table>} summarising parameter posteriors. Contains a
-following variables: \code{variable}, \code{mean}, \code{mean_se}, \code{sd}, \code{median}, and
-\code{lower_}, \code{upper_} followed by credible interval labels indicating the
-credible intervals present.
+A \verb{<data.table>} summarising parameter posteriors.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-Extracts summarised parameter posteriors from a \code{stanfit} object using
-\code{rstan::summary()} in a format consistent with other summary functions
-in \code{{EpiNow2}}.
+Extracts summarised parameter posteriors from a fitted model.
 }

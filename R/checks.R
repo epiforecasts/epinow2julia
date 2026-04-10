@@ -180,8 +180,7 @@ check_sparse_pmf_tail <- function(pmf, span = 5, tol = 1e-6) {
 #' having a truncation distribution longer than this period means the tail of
 #' the distribution will be used.
 #'
-#' @param stan_args List of stan arguments including the data element with
-#'   delay information from [create_stan_delays()]
+#' @param stan_args List of model arguments including delay information.
 #' @param time_points Integer length of the observed time period
 #'   (t - seeding_time - horizon)
 #' @importFrom cli cli_warn col_blue

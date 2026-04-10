@@ -2,31 +2,39 @@
 % Please edit documentation in R/stan.R
 \name{epinow2_cmdstan_model}
 \alias{epinow2_cmdstan_model}
-\title{Load and compile an EpiNow2 cmdstanr model}
+\title{Stan model compatibility layer}
 \usage{
 epinow2_cmdstan_model(
   model = "estimate_infections",
-  dir = system.file("stan", package = "EpiNow2"),
+  dir = NULL,
   verbose = FALSE,
   ...
 )
 }
 \arguments{
-\item{model}{A character string indicating the model to use. Needs to be
-present in \code{dir} (with extension \code{.stan}). Defaults to "estimate_infections".}
+\item{model}{Character string indicating the model to use.}
 
-\item{dir}{A character string specifying the path to any stan
-files to include in the model. If missing the package default is used.}
+\item{dir}{Character string specifying the path to Stan files.}
 
-\item{verbose}{Logical, defaults to \code{TRUE}. Should verbose
-messages be shown.}
+\item{verbose}{Logical. Should verbose messages be shown.}
 
-\item{...}{Additional arguments passed to \code{\link[cmdstanr:cmdstan_model]{cmdstanr::cmdstan_model()}}.}
+\item{...}{Additional arguments.}
 }
 \value{
-A \code{cmdstanr} model.
+Errors with deprecation message.
 }
 \description{
-The function has been adapted from a similar function in the epinowcast
-package (Copyright holder: epinowcast authors, under MIT License).
+These functions are retained for backward compatibility.
+The Julia backend is used for all model fitting.
+
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
+This function is deprecated. The Julia backend is now used for inference.
 }
+\keyword{EpiNow2}
+\keyword{Load}
+\keyword{an}
+\keyword{and}
+\keyword{cmdstanr}
+\keyword{compile}
+\keyword{internal}
+\keyword{model}

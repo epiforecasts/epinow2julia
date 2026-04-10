@@ -7,18 +7,14 @@
 extract_delays(samples, args)
 }
 \arguments{
-\item{samples}{Extracted stan model (using \code{\link[rstan:stanfit-method-extract]{rstan::extract()}})}
+\item{samples}{Extracted model samples}
 
-\item{args}{Stan data list with delay_id_* and related lookup variables.}
+\item{args}{Model arguments list}
 }
 \value{
-A \verb{<data.table>} with columns: variable, sample, value,
-or NULL if delay parameters don't exist in the samples
+A \verb{<data.table>} with variable, sample, value columns
 }
 \description{
-Extracts samples from all delay parameters using the delay ID lookup system.
-Similar to extract_parameters(), this extracts all delay distribution
-parameters and uses the *_id variables (e.g., delay_id, trunc_id) to assign
-meaningful names.
+Extract samples from all delay parameters
 }
 \keyword{internal}

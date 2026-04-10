@@ -2,32 +2,21 @@
 % Please edit documentation in R/extract.R
 \name{extract_latent_state}
 \alias{extract_latent_state}
-\title{Extract samples for a latent state from a Stan model}
+\title{Extract samples for a latent state from a model}
 \usage{
 extract_latent_state(param, samples, dates)
 }
 \arguments{
 \item{param}{Character string indicating the latent state to extract}
 
-\item{samples}{Extracted stan model (using \code{\link[rstan:stanfit-method-extract]{rstan::extract()}})}
+\item{samples}{Extracted model samples (list of arrays)}
 
-\item{dates}{A vector identifying the dimensionality of the latent state to
-extract. Generally this will be a date.}
+\item{dates}{A vector of dates for the time dimension}
 }
 \value{
-A \verb{<data.frame>} containing the following columns:
-\describe{
-\item{time}{Integer index (1..N) corresponding to the position in the
-supplied dates vector. This is the row/time-step index that maps to the
-date column}
-\item{date}{The date corresponding to this time step}
-\item{sample}{Integer sample ID from the posterior}
-\item{value}{Numeric value of the parameter sample}
-}
+A \verb{<data.frame>} with time, date, sample, and value columns
 }
 \description{
-\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
-Extracts a time-varying latent state from a list of stan output and returns
-it as a \verb{<data.table>}.
+Extract samples for a latent state from a model
 }
 \keyword{internal}

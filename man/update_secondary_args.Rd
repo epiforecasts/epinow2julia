@@ -16,12 +16,9 @@ fit. Priors that are currently use to update the defaults are the scaling
 fraction ("fraction_observed"), and delay parameters ("delay_params"). The
 \verb{<data.frame>} should have the following variables: \code{variable}, \code{mean}, and
 \code{sd}.}
-
-\item{verbose}{Logical, defaults to \code{FALSE}. Should verbose progress
-messages be returned.}
 }
 \value{
-A list as produced by \code{create_stan_data()}.
+A list of updated data.
 }
 \description{
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}

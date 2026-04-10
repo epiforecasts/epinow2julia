@@ -2,7 +2,7 @@
 % Please edit documentation in R/utilities.R
 \name{match_output_arguments}
 \alias{match_output_arguments}
-\title{Match User Supplied Arguments with Supported Options}
+\title{Allocate Delays into Required Stan Format}
 \usage{
 match_output_arguments(
   input_args = NULL,
@@ -30,5 +30,8 @@ A logical vector of named output arguments
 \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{\figure{lifecycle-stable.svg}{options: alt='[Stable]'}}}{\strong{[Stable]}}
 Match user supplied arguments with supported options and return a logical
 list for internal usage.
+}
+\details{
+Match User Supplied Arguments with Supported Options
 }
 \keyword{internal}
