@@ -50,3 +50,4 @@ inst/dev/benchmark-results.md
 
 # Claude
 .claude/*
+R/stanmodels.R
