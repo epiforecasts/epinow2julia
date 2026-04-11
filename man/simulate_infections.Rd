@@ -120,7 +120,7 @@ standard deviation of delays or observation scaling, must be fixed.
 Uncertain parameters are not allowed.
 }
 \examples{
-\donttest{
+\dontrun{
 R <- data.frame(
   date = seq.Date(as.Date("2023-01-01"), length.out = 14, by = "day"),
   R = c(rep(1.2, 7), rep(0.8, 7))

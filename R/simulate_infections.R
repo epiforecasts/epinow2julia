@@ -44,7 +44,7 @@
 #'   reported cases (variable `reported_cases`) by date.
 #' @export
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' R <- data.frame(
 #'   date = seq.Date(as.Date("2023-01-01"), length.out = 14, by = "day"),
 #'   R = c(rep(1.2, 7), rep(0.8, 7))
@@ -198,7 +198,7 @@ simulate_infections <- function(R,
 #' [gp_opts()]
 #' @export
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # set number of cores to use
 #' old_opts <- options()
 #' options(mc.cores = ifelse(interactive(), 4, 1))

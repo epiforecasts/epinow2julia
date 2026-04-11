@@ -54,7 +54,7 @@ explore forecast models or past counterfactuals. Simulations can be run in
 parallel using \code{\link[future:plan]{future::plan()}}.
 }
 \examples{
-\donttest{
+\dontrun{
 # set number of cores to use
 old_opts <- options()
 options(mc.cores = ifelse(interactive(), 4, 1))

@@ -7,8 +7,7 @@
 check_truncation_length(stan_args, time_points)
 }
 \arguments{
-\item{stan_args}{List of stan arguments including the data element with
-delay information from \code{\link[=create_stan_delays]{create_stan_delays()}}}
+\item{stan_args}{List of model arguments including delay information.}
 
 \item{time_points}{Integer length of the observed time period
 (t - seeding_time - horizon)}

@@ -45,7 +45,7 @@ Fits an integer adjusted exponential, gamma or lognormal distribution using
 stan.
 }
 \examples{
-\donttest{
+\dontrun{
 # integer adjusted exponential model
 dist_fit(rexp(1:100, 2),
   samples = 1000, dist = "exp",

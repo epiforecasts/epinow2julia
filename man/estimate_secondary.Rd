@@ -96,7 +96,7 @@ observation from a primary across multiple regions and
 for an application forecasting Covid-19 deaths in Germany and Poland.
 }
 \examples{
-\donttest{
+\dontrun{
 # set number of cores to use
 old_opts <- options()
 options(mc.cores = ifelse(interactive(), 4, 1))

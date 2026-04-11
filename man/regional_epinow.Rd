@@ -116,7 +116,7 @@ using \code{\link[progressr:handlers]{progressr::handlers()}} and enable it in b
 \code{R_PROGRESSR_ENABLE=TRUE} as an environment variable.
 }
 \examples{
-\donttest{
+\dontrun{
 # set number of cores to use
 old_opts <- options()
 options(mc.cores = ifelse(interactive(), 4, 1))

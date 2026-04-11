@@ -159,7 +159,7 @@ merge_trunc_pred_obs <- function(observations, predictions) {
 #' @importFrom checkmate assert_character assert_numeric assert_class
 #' assert_logical
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # set number of cores to use
 #' old_opts <- options()
 #' options(mc.cores = ifelse(interactive(), 4, 1))

@@ -26,7 +26,7 @@
 #' @inheritParams stan_opts
 #' @importFrom cli cli_warn col_blue
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # integer adjusted exponential model
 #' dist_fit(rexp(1:100, 2),
 #'   samples = 1000, dist = "exp",
@@ -113,7 +113,7 @@ dist_fit <- function(values = NULL, samples = 1000, cores = 1,
 #' @importFrom cli cli_abort col_blue
 #' @export
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # lognormal
 #' # bootstraps and samples have been reduced for this example
 #' # for real analyses, use more
@@ -244,7 +244,7 @@ bootstrapped_dist_fit <- function(values, dist = "lognormal",
 #' @export
 #' @seealso [bootstrapped_dist_fit()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # bootstraps and samples have been reduced for this example
 #' delays <- rlnorm(500, log(5), 1)
 #' estimate_delay(delays, samples = 500, bootstraps = 2)

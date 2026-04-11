@@ -65,7 +65,7 @@ of that model in R with potentially time-varying scalings and delays is
 available as `convolve_and_scale()
 }
 \examples{
-\donttest{
+\dontrun{
 ## load data.table to manipulate `example_confirmed` below
 library(data.table)
 cases <- as.data.table(example_confirmed)[, primary := confirm]

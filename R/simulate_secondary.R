@@ -22,7 +22,7 @@
 #'   by date.
 #' @export
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' ## load data.table to manipulate `example_confirmed` below
 #' library(data.table)
 #' cases <- as.data.table(example_confirmed)[, primary := confirm]

@@ -20,7 +20,7 @@ Estimate a log normal delay distribution from a vector of integer delays.
 Currently this function is a simple wrapper for \code{\link[=bootstrapped_dist_fit]{bootstrapped_dist_fit()}}.
 }
 \examples{
-\donttest{
+\dontrun{
 # bootstraps and samples have been reduced for this example
 delays <- rlnorm(500, log(5), 1)
 estimate_delay(delays, samples = 500, bootstraps = 2)

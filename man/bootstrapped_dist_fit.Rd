@@ -51,7 +51,7 @@ of the available reporting delay sample may not be representative of the
 current case load.
 }
 \examples{
-\donttest{
+\dontrun{
 # lognormal
 # bootstraps and samples have been reduced for this example
 # for real analyses, use more

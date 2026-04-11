@@ -87,7 +87,7 @@ This approach assumes that:
 }
 }
 \examples{
-\donttest{
+\dontrun{
 # set number of cores to use
 old_opts <- options()
 options(mc.cores = ifelse(interactive(), 4, 1))

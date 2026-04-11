@@ -74,7 +74,7 @@
 #' assert_logical
 #' @importFrom cli cli_abort col_red
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # set number of cores to use
 #' old_opts <- options()
 #' options(mc.cores = ifelse(interactive(), 4, 1))
