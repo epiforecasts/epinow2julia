@@ -21,6 +21,7 @@
 #'   the `EPINOW2_JULIA_PROJECT` environment variable.
 #'
 #' @importFrom cli cli_inform cli_abort
+#' @importFrom JuliaConnectoR juliaEval juliaCall juliaImport
 #' @return Invisible `NULL`, called for side effects.
 #' @keywords internal
 setup_julia <- function(project_path = NULL) {

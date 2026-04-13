@@ -854,15 +854,8 @@ stan_opts <- function(object = NULL,
   method <- arg_match(method)
   backend_passed <- !missing(backend)
   backend <- arg_match(backend)
-  if (backend == "cmdstanr" && !requireNamespace("cmdstanr", quietly = TRUE)) {
-    cli_abort(
-      c(
-        "x" = "The {col_blue('cmdstanr')} R package is not installed.",
-        "i" = "Install it from {.url https://github.com/stan-dev/cmdstanr}
-        to use the {col_blue('cmdstanr')} backend."
-      )
-    )
-  }
+  # Backend parameter is kept for backward compatibility but ignored;
+  # all inference is done via the Julia backend.
   opts <- list()
   if (!is.null(object)) {
     if (backend_passed) {
