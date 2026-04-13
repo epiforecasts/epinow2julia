@@ -16,6 +16,9 @@ fit. Priors that are currently use to update the defaults are the scaling
 fraction ("fraction_observed"), and delay parameters ("delay_params"). The
 \verb{<data.frame>} should have the following variables: \code{variable}, \code{mean}, and
 \code{sd}.}
+
+\item{verbose}{Logical, defaults to TRUE. Should informational messages be
+displayed.}
 }
 \value{
 A list of updated data.

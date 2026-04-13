@@ -238,6 +238,9 @@ estimate_secondary <- function(data,
 #'   `<data.frame>` should have the following variables: `variable`, `mean`, and
 #'   `sd`.
 #'
+#' @param verbose Logical, defaults to TRUE. Should informational messages be
+#'   displayed.
+#'
 #' @return A list of updated data.
 #' @export
 #' @importFrom data.table as.data.table
