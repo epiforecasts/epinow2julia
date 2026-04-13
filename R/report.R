@@ -143,17 +143,15 @@ report_summary <- function(summarised_estimates,
 #' `summarised_estimates[variable == "growth_rate"]`, respectively.
 #' @export
 #' @examples
-#' # get example output form estimate_infections
+#' \dontrun{
 #' out <- readRDS(system.file(
 #'   package = "EpiNow2", "extdata", "example_estimate_infections.rds"
 #' ))
-#'
-#' # plot infections
 #' plots <- report_plots(
 #'   summarised_estimates = summary(out, type = "parameters"),
 #'   reported = out$observations
 #' )
-#' plots
+#' }
 report_plots <- function(summarised_estimates, reported,
                          target_folder = NULL, ...) {
   # set input to data.table

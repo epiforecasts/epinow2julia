@@ -31,17 +31,15 @@ Returns key summary plots for estimates. May be depreciated in later
 releases as current S3 methods are enhanced.
 }
 \examples{
-# get example output form estimate_infections
+\dontrun{
 out <- readRDS(system.file(
   package = "EpiNow2", "extdata", "example_estimate_infections.rds"
 ))
-
-# plot infections
 plots <- report_plots(
   summarised_estimates = summary(out, type = "parameters"),
   reported = out$observations
 )
-plots
+}
 }
 \seealso{
 \code{\link[=plot_estimates]{plot_estimates()}}
