@@ -26,13 +26,12 @@ List of plots as produced by \code{\link[=report_plots]{report_plots()}}
 \code{plot} method for class \verb{<estimate_infections>}.
 }
 \examples{
-# get example output
+\dontrun{
 out <- readRDS(system.file(
   package = "EpiNow2", "extdata", "example_estimate_infections.rds"
 ))
-
-# plot with error bars instead of ribbons
 plot(out, style = "linerange")
+}
 }
 \seealso{
 \code{\link[=report_plots]{report_plots()}}

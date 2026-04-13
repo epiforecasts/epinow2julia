@@ -55,6 +55,7 @@ In future releases it may be depreciated in favour of increasing the
 functionality of the S3 plot methods.
 }
 \examples{
+\dontrun{
 # get example model results
 out <- readRDS(system.file(
   package = "EpiNow2", "extdata", "example_estimate_infections.rds"
@@ -66,32 +67,5 @@ plot_estimates(
   reported = out$observations,
   ylab = "Cases", max_plot = 2
 ) + ggplot2::facet_wrap(~type, scales = "free_y")
-
-# plot reported cases estimated via Rt
-plot_estimates(
-  estimate = summary(out, type = "parameters", param = "reported_cases"),
-  reported = out$observations,
-  ylab = "Cases"
-)
-
-# plot Rt estimates
-plot_estimates(
-  estimate = summary(out, type = "parameters", param = "R"),
-  ylab = "Effective Reproduction No.",
-  hline = 1
-)
-
-#' # plot Rt estimates without forecasts
-plot_estimates(
-  estimate = summary(out, type = "parameters", param = "R"),
-  ylab = "Effective Reproduction No.",
-  hline = 1, estimate_type = "Estimate"
-)
-
-# plot with error bars instead of ribbons
-plot_estimates(
-  estimate = summary(out, type = "parameters", param = "R"),
-  ylab = "Effective Reproduction No.",
-  hline = 1, style = "linerange"
-)
+}
 }

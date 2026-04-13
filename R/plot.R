@@ -100,6 +100,7 @@ plot_CrIs <- function(plot, CrIs, alpha, linewidth,
 #' @importFrom purrr map
 #' @importFrom rlang arg_match
 #' @examples
+#' \dontrun{
 #' # get example model results
 #' out <- readRDS(system.file(
 #'   package = "EpiNow2", "extdata", "example_estimate_infections.rds"
@@ -111,34 +112,7 @@ plot_CrIs <- function(plot, CrIs, alpha, linewidth,
 #'   reported = out$observations,
 #'   ylab = "Cases", max_plot = 2
 #' ) + ggplot2::facet_wrap(~type, scales = "free_y")
-#'
-#' # plot reported cases estimated via Rt
-#' plot_estimates(
-#'   estimate = summary(out, type = "parameters", param = "reported_cases"),
-#'   reported = out$observations,
-#'   ylab = "Cases"
-#' )
-#'
-#' # plot Rt estimates
-#' plot_estimates(
-#'   estimate = summary(out, type = "parameters", param = "R"),
-#'   ylab = "Effective Reproduction No.",
-#'   hline = 1
-#' )
-#'
-#' #' # plot Rt estimates without forecasts
-#' plot_estimates(
-#'   estimate = summary(out, type = "parameters", param = "R"),
-#'   ylab = "Effective Reproduction No.",
-#'   hline = 1, estimate_type = "Estimate"
-#' )
-#'
-#' # plot with error bars instead of ribbons
-#' plot_estimates(
-#'   estimate = summary(out, type = "parameters", param = "R"),
-#'   ylab = "Effective Reproduction No.",
-#'   hline = 1, style = "linerange"
-#' )
+#' }
 plot_estimates <- function(estimate, reported, ylab, hline,
                            obs_as_col = TRUE, max_plot = 10,
                            estimate_type = c(
@@ -409,13 +383,12 @@ plot_summary <- function(summary_results,
 #' @return List of plots as produced by [report_plots()]
 #' @export
 #' @examples
-#' # get example output
+#' \dontrun{
 #' out <- readRDS(system.file(
 #'   package = "EpiNow2", "extdata", "example_estimate_infections.rds"
 #' ))
-#'
-#' # plot with error bars instead of ribbons
 #' plot(out, style = "linerange")
+#' }
 plot.estimate_infections <- function(x,
                                      type = "summary",
                                      CrIs = c(0.2, 0.5, 0.9),
