@@ -233,7 +233,7 @@ r_rt_opts_to_julia <- function(opts) {
 
   prior <- dist_spec_to_julia(opts$prior)
 
-  # Map R strings to Julia enum names
+  # Map R strings to the strings the Julia bridge accepts
   gp_on <- switch(opts$gp_on,
     "R_t-1" = "gp_Rt", "R0" = "gp_R0", "gp_Rt"
   )
@@ -254,14 +254,15 @@ r_rt_opts_to_julia <- function(opts) {
     0.0
   }
 
-  # Use juliaLet to pass the prior as a variable while using enums inline
-  juliaEval(sprintf(
-    'function _make_rt_opts(p) rt_opts(prior = p, use_rt = true, rw = %d, future = %s, gp_on = %s, pop = %.1f, pop_period = %s, pop_floor = %.1f) end',
-    as.integer(opts$rw), future_str, gp_on,
-    as.numeric(pop_val), pop_period,
-    as.numeric(opts$pop_floor %||% 1.0)
-  ))
-  juliaCall("_make_rt_opts", prior)
+  juliaCall(
+    "EpiNow2._r_bridge_rt_opts", prior,
+    rw = as.integer(opts$rw),
+    future = future_str,
+    gp_on = gp_on,
+    pop = as.numeric(pop_val),
+    pop_period = pop_period,
+    pop_floor = as.numeric(opts$pop_floor %||% 1.0)
+  )
 }
 
 #' Convert R gp_opts to Julia GPOpts
@@ -281,12 +282,14 @@ r_gp_opts_to_julia <- function(opts) {
     "periodic" = "periodic", "matern"
   )
 
-  juliaEval(sprintf(
-    'function _make_gp_opts(ls, alpha) gp_opts(basis_prop = %.4f, boundary_scale = %.4f, ls = ls, alpha = alpha, kernel = %s, matern_order = %.1f, w0 = %.4f) end',
-    as.numeric(opts$basis_prop), as.numeric(opts$boundary_scale),
-    kernel, as.numeric(opts$matern_order), as.numeric(opts$w0)
-  ))
-  juliaCall("_make_gp_opts", ls_dist, alpha_dist)
+  juliaCall(
+    "EpiNow2._r_bridge_gp_opts", ls_dist, alpha_dist,
+    basis_prop = as.numeric(opts$basis_prop),
+    boundary_scale = as.numeric(opts$boundary_scale),
+    kernel = kernel,
+    matern_order = as.numeric(opts$matern_order),
+    w0 = as.numeric(opts$w0)
+  )
 }
 
 #' Convert R obs_opts to Julia ObsOpts
@@ -310,15 +313,14 @@ r_obs_opts_to_julia <- function(opts) {
     as.numeric(opts$scale)
   }
 
-  juliaEval(sprintf(
-    'function _make_obs_opts(disp, sc) obs_opts(family = %s, dispersion = disp, weight = %.4f, week_effect = %s, week_length = %d, scale = sc, likelihood = %s) end',
-    family,
-    as.numeric(opts$weight),
-    tolower(as.character(isTRUE(opts$week_effect))),
-    as.integer(opts$week_length),
-    tolower(as.character(isTRUE(opts$likelihood)))
-  ))
-  juliaCall("_make_obs_opts", dispersion, scale)
+  juliaCall(
+    "EpiNow2._r_bridge_obs_opts", dispersion, scale,
+    family = family,
+    weight = as.numeric(opts$weight),
+    week_effect = isTRUE(opts$week_effect),
+    week_length = as.integer(opts$week_length),
+    likelihood = isTRUE(opts$likelihood)
+  )
 }
 
 #' Convert R backcalc_opts to Julia BackcalcOpts
@@ -331,10 +333,12 @@ r_backcalc_opts_to_julia <- function(opts) {
     "reports" = "bc_infections", "growth_rate" = "bc_growth_rate",
     "bc_infections"
   )
-  juliaEval(sprintf(
-    'backcalc_opts(prior = %s, prior_window = %d, rt_window = %d)',
-    prior, as.integer(opts$prior_window), as.integer(opts$rt_window)
-  ))
+  juliaCall(
+    "EpiNow2._r_bridge_backcalc_opts",
+    prior = prior,
+    prior_window = as.integer(opts$prior_window),
+    rt_window = as.integer(opts$rt_window)
+  )
 }
 
 #' Convert R forecast_opts to Julia ForecastOpts
@@ -355,11 +359,12 @@ r_forecast_opts_to_julia <- function(opts) {
 r_secondary_opts_to_julia <- function(opts) {
   # R secondary_opts stores flags, not a type field.
   # Infer type from the flag pattern.
-  if (isTRUE(opts$cumulative) || opts$cumulative == 1) {
-    juliaEval("secondary_opts(prevalence)")
+  type <- if (isTRUE(opts$cumulative) || opts$cumulative == 1) {
+    "prevalence"
   } else {
-    juliaEval("secondary_opts(incidence)")
+    "incidence"
   }
+  juliaCall("EpiNow2._r_bridge_secondary_opts", type = type)
 }
 
 #' Convert stan_opts to Julia InferenceOpts
@@ -371,8 +376,13 @@ r_secondary_opts_to_julia <- function(opts) {
 #' @param stan A `stan_opts` object
 #' @return JuliaCall proxy for Julia InferenceOpts
 #' @keywords internal
-stan_opts_to_inference_opts <- function(stan) {
-  method <- stan$method %||% "sampling"
+r_inference_opts_to_julia <- function(opts) {
+  # Accept both modern inference_opts() (nested args list) and legacy
+  # stan_opts() (flat top-level list) shapes. Field names differ between
+  # the two, so coalesce.
+  flat <- opts$args %||% opts
+
+  method <- opts$method %||% flat$method %||% "sampling"
   if (method != "sampling") {
     cli::cli_warn(
       c(
@@ -382,32 +392,47 @@ stan_opts_to_inference_opts <- function(stan) {
     )
   }
 
-  # Extract sampling parameters
-  samples <- as.integer(stan$args$iter_sampling %||%
-    stan$args$samples %||% 2000L)
-  warmup <- as.integer(stan$args$iter_warmup %||%
-    stan$args$warmup %||% 250L)
-  chains <- as.integer(stan$args$chains %||% 4L)
-  seed <- stan$args$seed
+  warmup  <- as.integer(flat$warmup %||% flat$iter_warmup %||% 250L)
+  # Field convention differs:
+  #   inference_opts(samples = N) — N is post-warmup count (Julia's convention)
+  #   stan_opts(samples = N, warmup = W) — same; stan_sampling_opts then
+  #     stores total iterations as `iter = N + W`.
+  # Prefer the explicit post-warmup field if present, else derive from iter.
+  samples <- as.integer(
+    flat$samples %||% flat$iter_sampling %||%
+      (if (!is.null(flat$iter)) flat$iter - warmup else 2000L)
+  )
+  chains  <- as.integer(flat$chains %||% 4L)
+  seed    <- flat$seed
 
-  # Extract control parameters
-  control <- stan$args$control %||% list()
+  control <- flat$control %||% list()
   target_acceptance <- as.numeric(control$adapt_delta %||% 0.9)
   max_treedepth <- as.integer(control$max_treedepth %||% 12L)
 
-  # AD backend: keep the Julia default (AutoReverseDiff(compile=true)) unless
-  # the user passed adtype = <julia expr> via stan_opts(...). The argument
-  # is a quoted string of Julia code so users can choose any
-  # ADTypes.AbstractADType (e.g. "AutoForwardDiff()", "AutoMooncake()").
-  adtype <- stan$args$adtype %||% stan$adtype
-  adtype_str <- if (!is.null(adtype)) sprintf(", adtype = %s", adtype) else ""
+  # AD backend: a string of Julia code like "AutoForwardDiff()" or
+  # "AutoMooncake()". NULL keeps the Julia default
+  # (AutoReverseDiff(compile=true)). We juliaEval() the string here so
+  # the bridge helper can dispatch on the resulting ADType.
+  adtype_expr <- flat$adtype %||% opts$adtype
+  adtype_jl <- if (!is.null(adtype_expr)) juliaEval(adtype_expr) else NULL
 
-  seed_str <- if (!is.null(seed)) sprintf(", seed = %d", as.integer(seed)) else ""
-  juliaEval(sprintf(
-    'inference_opts(samples = %d, warmup = %d, chains = %d, target_acceptance = %.4f, max_treedepth = %d%s%s)',
-    samples, warmup, chains, target_acceptance, max_treedepth, seed_str,
-    adtype_str
-  ))
+  args <- list(
+    samples = samples,
+    warmup = warmup,
+    chains = chains,
+    target_acceptance = target_acceptance,
+    max_treedepth = max_treedepth
+  )
+  if (!is.null(seed)) args$seed <- as.integer(seed)
+  if (!is.null(adtype_jl)) args$adtype <- adtype_jl
+
+  do.call(juliaCall, c(list("EpiNow2._r_bridge_inference_opts"), args))
+}
+
+# Back-compat alias used internally; new code should call
+# r_inference_opts_to_julia() directly.
+stan_opts_to_inference_opts <- function(stan) {
+  r_inference_opts_to_julia(stan)
 }
 
 
