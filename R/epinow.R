@@ -100,7 +100,7 @@ epinow <- function(data,
                    gp = gp_opts(),
                    obs = obs_opts(),
                    forecast = forecast_opts(),
-                   stan = stan_opts(),
+                   inference = inference_opts(),
                    CrIs = c(0.2, 0.5, 0.9),
                    return_output = is.null(target_folder),
                    output = c(
@@ -109,7 +109,14 @@ epinow <- function(data,
                    ),
                    plot_args = list(),
                    target_folder = NULL, target_date,
-                   logs = tempdir(), id = "epinow", verbose = interactive()) {
+                   logs = tempdir(), id = "epinow", verbose = interactive(),
+                   stan = lifecycle::deprecated()) {
+  if (lifecycle::is_present(stan)) {
+    lifecycle::deprecate_warn(
+      "0.2.0", "epinow(stan)", "epinow(inference)"
+    )
+    inference <- stan
+  }
   # Check inputs
   assert_logical(return_output)
   stopifnot(
@@ -188,7 +195,7 @@ epinow <- function(data,
       gp = gp,
       obs = obs,
       forecast = forecast,
-      stan = stan,
+      inference = inference,
       verbose = verbose,
       id = id
     )

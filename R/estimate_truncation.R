@@ -200,12 +200,19 @@ estimate_truncation <- function(data,
                                     max = 10
                                   )
                                 ),
-                                stan = stan_opts(),
+                                inference = inference_opts(),
                                 CrIs = c(0.2, 0.5, 0.9),
                                 filter_leading_zeros = FALSE,
                                 zero_threshold = Inf,
                                 verbose = TRUE,
-                                ...) {
+                                ...,
+                                stan = lifecycle::deprecated()) {
+  if (lifecycle::is_present(stan)) {
+    lifecycle::deprecate_warn(
+      "0.2.0", "estimate_truncation(stan)", "estimate_truncation(inference)"
+    )
+    inference <- stan
+  }
   # Validate inputs
   walk(data, check_reports_valid, model = "estimate_infections")
   assert_class(truncation, "dist_spec")
@@ -232,7 +239,7 @@ estimate_truncation <- function(data,
 
   # Convert opts
   julia_trunc <- r_trunc_opts_to_julia(truncation)
-  julia_inference <- stan_opts_to_inference_opts(stan)
+  julia_inference <- r_inference_opts_to_julia(inference)
 
   # Call Julia's estimate_truncation
   julia_result <- juliaCall(

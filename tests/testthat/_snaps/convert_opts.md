@@ -50,13 +50,13 @@
     Output
       EpiNow2.ForecastOpts(7)
 
-# stan_opts_to_inference_opts maps sampling args
+# r_inference_opts_to_julia maps sampling args
 
     Code
       cat(show_julia(julia_opts))
     Output
       Inference options:
         sampler: nuts
-        samples: 2000, warmup: 250, chains: 4
+        samples: 250, warmup: 100, chains: 2
         adtype: AutoReverseDiff(compile=true)
 

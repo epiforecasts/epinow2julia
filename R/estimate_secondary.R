@@ -151,13 +151,20 @@ estimate_secondary <- function(data,
                                ),
                                truncation = trunc_opts(),
                                obs = obs_opts(),
-                               stan = stan_opts(),
+                               inference = inference_opts(),
                                burn_in = 14,
                                CrIs = c(0.2, 0.5, 0.9),
                                priors = NULL,
                                model = NULL,
                                weigh_delay_priors = FALSE,
-                               verbose = interactive()) {
+                               verbose = interactive(),
+                               stan = lifecycle::deprecated()) {
+  if (lifecycle::is_present(stan)) {
+    lifecycle::deprecate_warn(
+      "0.2.0", "estimate_secondary(stan)", "estimate_secondary(inference)"
+    )
+    inference <- stan
+  }
   # Validate the inputs
   check_reports_valid(data, model = "estimate_secondary")
   assert_class(secondary, "secondary_opts")
@@ -192,7 +199,7 @@ estimate_secondary <- function(data,
   julia_secondary <- r_secondary_opts_to_julia(secondary)
   julia_delays <- r_delay_opts_to_julia(delays)
   julia_obs <- r_obs_opts_to_julia(obs)
-  julia_inference <- stan_opts_to_inference_opts(stan)
+  julia_inference <- r_inference_opts_to_julia(inference)
 
   # Call Julia's estimate_secondary
   julia_result <- juliaCall(

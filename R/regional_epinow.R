@@ -95,7 +95,7 @@ regional_epinow <- function(data,
                             gp = gp_opts(),
                             obs = obs_opts(),
                             forecast = forecast_opts(),
-                            stan = stan_opts(),
+                            inference = inference_opts(),
                             CrIs = c(0.2, 0.5, 0.9),
                             target_folder = NULL,
                             target_date,
@@ -108,7 +108,15 @@ regional_epinow <- function(data,
                             summary_args = list(),
                             verbose = FALSE,
                             logs = tempdir(check = TRUE),
-                            ...) {
+                            ...,
+                            stan = lifecycle::deprecated()) {
+
+  if (lifecycle::is_present(stan)) {
+    lifecycle::deprecate_warn(
+      "0.2.0", "regional_epinow(stan)", "regional_epinow(inference)"
+    )
+    inference <- stan
+  }
 
   # supported output
   output <- match_output_arguments(output,
@@ -162,7 +170,7 @@ regional_epinow <- function(data,
       gp = gp,
       obs = obs,
       forecast = forecast,
-      stan = stan,
+      inference = inference,
       CrIs = CrIs,
       data = reported_cases,
       target_folder = target_folder,
@@ -331,7 +339,7 @@ run_region <- function(target_region,
                        backcalc,
                        gp,
                        obs,
-                       stan,
+                       inference,
                        CrIs,
                        data,
                        target_folder,
@@ -369,7 +377,7 @@ run_region <- function(target_region,
     backcalc = filter_opts(backcalc, target_region),
     gp = filter_opts(gp, target_region),
     obs = filter_opts(obs, target_region),
-    stan = filter_opts(stan, target_region),
+    inference = filter_opts(inference, target_region),
     CrIs = CrIs,
     data = regional_cases,
     target_folder = target_folder,

@@ -130,9 +130,17 @@ estimate_infections <- function(data,
                                 gp = gp_opts(),
                                 obs = obs_opts(),
                                 forecast = forecast_opts(),
-                                stan = stan_opts(),
+                                inference = inference_opts(),
                                 id = "estimate_infections",
-                                verbose = interactive()) {
+                                verbose = interactive(),
+                                stan = lifecycle::deprecated()) {
+  if (lifecycle::is_present(stan)) {
+    lifecycle::deprecate_warn(
+      "0.2.0", "estimate_infections(stan)", "estimate_infections(inference)"
+    )
+    inference <- stan
+  }
+
   # Validate inputs
   check_reports_valid(data, model = "estimate_infections")
   assert_class(generation_time, "generation_time_opts")
@@ -146,7 +154,7 @@ estimate_infections <- function(data,
     forecast <- forecast_opts(horizon = 0)
   }
   assert_class(forecast, "forecast_opts")
-  assert_class(stan, "stan_opts")
+  assert_class(inference, "inference_opts")
   assert_string(id)
   assert_logical(verbose)
 
@@ -178,7 +186,7 @@ estimate_infections <- function(data,
   julia_gp <- r_gp_opts_to_julia(gp)
   julia_obs <- r_obs_opts_to_julia(obs)
   julia_forecast <- r_forecast_opts_to_julia(forecast)
-  julia_inference <- stan_opts_to_inference_opts(stan)
+  julia_inference <- r_inference_opts_to_julia(inference)
 
   # Call Julia's estimate_infections
   julia_result <- juliaCall(

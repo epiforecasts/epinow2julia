@@ -51,24 +51,39 @@ test_that("r_forecast_opts_to_julia round-trips a 7-day horizon", {
   expect_snapshot(cat(show_julia(julia_opts)))
 })
 
-test_that("stan_opts_to_inference_opts maps sampling args", {
+test_that("r_inference_opts_to_julia maps sampling args", {
   skip_if_no_julia()
-  julia_opts <- stan_opts_to_inference_opts(
-    stan_opts(samples = 250, warmup = 100, chains = 2)
+  julia_opts <- r_inference_opts_to_julia(
+    inference_opts(samples = 250, warmup = 100, chains = 2)
   )
   expect_snapshot(cat(show_julia(julia_opts)))
 })
 
-test_that("stan_opts_to_inference_opts forwards adtype", {
+test_that("r_inference_opts_to_julia forwards adtype", {
   skip_if_no_julia()
-  s <- stan_opts(samples = 50, warmup = 50, chains = 1)
-  s$adtype <- "AutoForwardDiff()"
-  julia_opts <- stan_opts_to_inference_opts(s)
-  # adtype should now be ForwardDiff, not the default ReverseDiff
+  julia_opts <- r_inference_opts_to_julia(
+    inference_opts(samples = 50, warmup = 50, chains = 1,
+                   adtype = "AutoForwardDiff()")
+  )
   ad_str <- JuliaConnectoR::juliaCall(
     "string",
     JuliaConnectoR::juliaCall("getfield", julia_opts,
                               JuliaConnectoR::juliaEval(":adtype"))
   )
   expect_match(ad_str, "ForwardDiff")
+})
+
+test_that("stan_opts() still works with a deprecation warning", {
+  skip_if_no_julia()
+  expect_warning(
+    julia_opts <- r_inference_opts_to_julia(
+      suppressWarnings(stan_opts(samples = 100, warmup = 50, chains = 1))
+    ),
+    regexp = NA
+  )
+  # Check basic shape survives the old-style input
+  samples_val <- JuliaConnectoR::juliaCall(
+    "getfield", julia_opts, JuliaConnectoR::juliaEval(":samples")
+  )
+  expect_equal(as.integer(samples_val), 100L)
 })

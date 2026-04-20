@@ -851,11 +851,19 @@ stan_opts <- function(object = NULL,
                       backend = c("rstan", "cmdstanr"),
                       return_fit = TRUE,
                       ...) {
+  lifecycle::deprecate_warn(
+    "0.2.0",
+    "stan_opts()",
+    "inference_opts()",
+    details = paste(
+      "The Julia backend uses Turing.jl for inference, so the",
+      "stan-specific arguments {.arg object}, {.arg method}, and {.arg",
+      "backend} have no effect."
+    )
+  )
   method <- arg_match(method)
   backend_passed <- !missing(backend)
   backend <- arg_match(backend)
-  # Backend parameter is kept for backward compatibility but ignored;
-  # all inference is done via the Julia backend.
   opts <- list()
   if (!is.null(object)) {
     if (backend_passed) {
@@ -901,7 +909,65 @@ stan_opts <- function(object = NULL,
   )
 
   opts <- c(opts, list(return_fit = return_fit))
-  attr(opts, "class") <- c("stan_opts", class(opts))
+  attr(opts, "class") <- c("inference_opts", "stan_opts", class(opts))
+  opts
+}
+
+#' Inference options for the Julia backend
+#'
+#' @description `r lifecycle::badge("experimental")`
+#' Options for the Turing.jl inference run that powers
+#' [estimate_infections()] and friends. Replaces [stan_opts()] for the
+#' Julia-backed package; `stan_opts()` is still accepted (with a
+#' deprecation warning) and silently maps onto these options.
+#'
+#' @param samples Integer, total post-warmup posterior samples per chain.
+#'   Defaults to 2000.
+#' @param warmup Integer, warmup iterations per chain. Defaults to 1000.
+#' @param chains Integer, number of MCMC chains. Defaults to 4. Chains are
+#'   run in parallel via `MCMCThreads()`; see [setup_julia()] for thread
+#'   configuration.
+#' @param seed Integer or NULL. PRNG seed; NULL leaves Julia to pick one.
+#' @param adtype Character, a Julia expression naming an
+#'   `ADTypes.AbstractADType`. NULL keeps the Julia default
+#'   (`AutoReverseDiff(compile = true)`). Examples:
+#'   `"AutoForwardDiff()"`, `"AutoReverseDiff(compile = false)"`,
+#'   `"AutoMooncake()"`.
+#' @param target_acceptance Numeric in (0, 1), NUTS target acceptance.
+#'   Defaults to 0.9.
+#' @param max_treedepth Integer, NUTS max tree depth. Defaults to 12.
+#' @param return_fit Logical, kept for parity with [stan_opts()]. The Julia
+#'   backend always returns the fit object.
+#' @return A list with class `<inference_opts>`.
+#' @export
+#' @seealso [setup_julia()]
+#' @examples
+#' inference_opts(samples = 1000, warmup = 500, chains = 2)
+#' inference_opts(adtype = "AutoForwardDiff()")
+inference_opts <- function(samples = 2000,
+                           warmup = 1000,
+                           chains = 4,
+                           seed = NULL,
+                           adtype = NULL,
+                           target_acceptance = 0.9,
+                           max_treedepth = 12L,
+                           return_fit = TRUE) {
+  opts <- list(
+    method = "sampling",
+    args = list(
+      samples = as.integer(samples),
+      warmup = as.integer(warmup),
+      chains = as.integer(chains),
+      seed = if (is.null(seed)) NULL else as.integer(seed),
+      adtype = adtype,
+      control = list(
+        adapt_delta = as.numeric(target_acceptance),
+        max_treedepth = as.integer(max_treedepth)
+      )
+    ),
+    return_fit = isTRUE(return_fit)
+  )
+  attr(opts, "class") <- c("inference_opts", "list")
   opts
 }
 
