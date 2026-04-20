@@ -290,30 +290,11 @@ get_samples.forecast_infections <- function(object, ...) {
 #' @export
 get_samples.estimate_secondary <- function(object, ...) {
   ensure_julia()
-  # EstimateSecondaryResult has a predictions DataFrame (summary stats)
-  # and a fit with generated quantities containing expected secondary values.
-  # Extract samples from the GQ expected values.
-  juliaEval('function _get_sec_samples(result)
-    gqs = result.fit.generated_quantities
-    dates = result.observations.date
-    burn_in = 0  # already removed during fitting
-    n_times = length(dates)
-
-    rows = Vector{NamedTuple{(:date, :variable, :sample, :value), Tuple{String, String, Int, Float64}}}()
-    for (si, gq) in enumerate(gqs)
-      expected = gq.expected
-      for t in 1:min(length(expected), n_times)
-        push!(rows, (
-          date = string(dates[t]),
-          variable = "sim_secondary",
-          sample = si,
-          value = Float64(expected[t])
-        ))
-      end
-    end
-    DataFrame(rows)
-  end')
-  julia_df <- juliaCall("_get_sec_samples", object$fit)
+  # Flatten the secondary-result generated quantities to a long DataFrame
+  # via the Julia-side helper EpiNow2._r_bridge_get_secondary_samples.
+  julia_df <- juliaCall(
+    "EpiNow2._r_bridge_get_secondary_samples", object$fit
+  )
   samples <- data.table::as.data.table(julia_df)
   samples[, date := as.Date(date)]
   samples[, time := as.integer(date - min(date)) + 1L]

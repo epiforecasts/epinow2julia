@@ -1,7 +1,18 @@
 # EpiNow2 (development version)
 
+## Performance
+
+- `setup_julia()` now sets `JULIA_NUM_THREADS` before launching Julia, so chains run in parallel under `MCMCThreads()`. A new `julia_threads()` accessor reports the active thread count, and `setup_julia(threads = N)` lets users pin it.
+
+## Bridge improvements
+
+- The Julia helper functions previously inlined as multi-line strings in `R/convert.R` and `R/get.R` are now defined as proper exported functions in EpiNow2.jl. Renames on the Julia side now surface at Julia compile time, not at R runtime.
+- Added snapshot tests for the R-to-Julia options translators so drift between the R and Julia APIs is caught by `R CMD check`.
+- `stan_opts(adtype = ...)` forwards an automatic-differentiation backend choice to the Julia `inference_opts()`. Defaults to `AutoReverseDiff(compile = true)`.
+
 ## Bug fixes
 
+- A bug was fixed in `extract_samples()` where the long-format Julia samples table was reshaped without first sorting by sample and date, which could silently transpose the resulting matrix. Reshape now goes through `data.table::dcast()`.
 - Fixed a bug in `forecast_infections()` where the summary call to extract dates was using modified args instead of the original fit dimensions, causing a date-dimension mismatch when extending the R trajectory beyond the original observation period.
 
 ## Breaking changes

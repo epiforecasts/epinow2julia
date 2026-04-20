@@ -395,10 +395,18 @@ stan_opts_to_inference_opts <- function(stan) {
   target_acceptance <- as.numeric(control$adapt_delta %||% 0.9)
   max_treedepth <- as.integer(control$max_treedepth %||% 12L)
 
+  # AD backend: keep the Julia default (AutoReverseDiff(compile=true)) unless
+  # the user passed adtype = <julia expr> via stan_opts(...). The argument
+  # is a quoted string of Julia code so users can choose any
+  # ADTypes.AbstractADType (e.g. "AutoForwardDiff()", "AutoMooncake()").
+  adtype <- stan$args$adtype %||% stan$adtype
+  adtype_str <- if (!is.null(adtype)) sprintf(", adtype = %s", adtype) else ""
+
   seed_str <- if (!is.null(seed)) sprintf(", seed = %d", as.integer(seed)) else ""
   juliaEval(sprintf(
-    'inference_opts(samples = %d, warmup = %d, chains = %d, target_acceptance = %.4f, max_treedepth = %d%s)',
-    samples, warmup, chains, target_acceptance, max_treedepth, seed_str
+    'inference_opts(samples = %d, warmup = %d, chains = %d, target_acceptance = %.4f, max_treedepth = %d%s%s)',
+    samples, warmup, chains, target_acceptance, max_treedepth, seed_str,
+    adtype_str
   ))
 }
 
@@ -454,20 +462,10 @@ r_secondary_data_to_julia <- function(data) {
 #' @keywords internal
 julia_samples_to_r <- function(julia_result, observations, horizon = 0,
                                seeding_time = 0) {
-  # Get samples from Julia - use a helper to convert dates/symbols to strings
-  # to avoid JuliaConnectoR serialisation issues
-  convert_fn <- juliaEval('function _convert_samples_df(result)
-    df = get_samples(result)
-    df2 = copy(df)
-    if hasproperty(df2, :date)
-      df2.date = string.(df2.date)
-    end
-    if hasproperty(df2, :variable)
-      df2.variable = string.(df2.variable)
-    end
-    df2
-  end')
-  julia_df <- juliaCall("_convert_samples_df", julia_result)
+  # Get samples from Julia. Coercion of Date/Symbol columns to String is
+  # handled by EpiNow2.jl's _r_bridge_convert_samples_df helper so that
+  # JuliaConnectoR can serialise cleanly without hand-rolled fixups here.
+  julia_df <- juliaCall("EpiNow2._r_bridge_convert_samples_df", julia_result)
   samples <- data.table::as.data.table(julia_df)
 
   # Ensure correct column types
