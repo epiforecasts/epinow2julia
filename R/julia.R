@@ -19,12 +19,17 @@
 #' @param project_path Character string giving the path to the EpiNow2.jl
 #'   project. If `NULL` (default), uses the `EpiNow2.julia_project` option or
 #'   the `EPINOW2_JULIA_PROJECT` environment variable.
+#' @param threads Integer; number of threads Julia should start with.
+#'   Controls chain-level parallelism via `MCMCThreads()`. If `NULL`
+#'   (default), respects an existing `JULIA_NUM_THREADS` environment
+#'   variable; otherwise uses one fewer than the number of physical cores
+#'   (minimum 1). Must be set before Julia starts.
 #'
 #' @importFrom cli cli_inform cli_abort
 #' @importFrom JuliaConnectoR juliaEval juliaCall juliaImport
 #' @return Invisible `NULL`, called for side effects.
 #' @keywords internal
-setup_julia <- function(project_path = NULL) {
+setup_julia <- function(project_path = NULL, threads = NULL) {
   if (.julia_env$initialised) {
     return(invisible(NULL))
   }
@@ -57,7 +62,23 @@ setup_julia <- function(project_path = NULL) {
     }
   }
 
-  cli_inform("Setting up Julia backend...")
+  # Determine thread count. Must be set before Julia is launched, since
+  # JULIA_NUM_THREADS is read once at startup.
+  existing_threads <- Sys.getenv("JULIA_NUM_THREADS", unset = "")
+  if (is.null(threads)) {
+    if (nzchar(existing_threads)) {
+      threads <- existing_threads
+    } else {
+      n_cores <- tryCatch(
+        parallel::detectCores(logical = FALSE),
+        error = function(e) NA_integer_
+      )
+      threads <- if (is.na(n_cores)) 1L else max(1L, n_cores - 1L)
+    }
+  }
+  Sys.setenv(JULIA_NUM_THREADS = as.character(threads))
+
+  cli_inform("Setting up Julia backend ({threads} thread{?s})...")
 
   # Set JULIA_PROJECT so JuliaConnectoR starts Julia in the right env
   Sys.setenv(JULIA_PROJECT = project_path)
@@ -68,8 +89,12 @@ setup_julia <- function(project_path = NULL) {
   JuliaConnectoR::juliaEval("using Distributions")
   JuliaConnectoR::juliaEval("using Dates")
 
+  n_threads <- as.integer(
+    JuliaConnectoR::juliaEval("Threads.nthreads()")
+  )
+  .julia_env$threads <- n_threads
   .julia_env$initialised <- TRUE
-  cli_inform("Julia backend ready.")
+  cli_inform("Julia backend ready ({n_threads} thread{?s}).")
 
   invisible(NULL)
 }
@@ -100,4 +125,18 @@ julia_available <- function() {
     },
     error = function(e) FALSE
   )
+}
+
+#' Number of threads the Julia backend is using
+#'
+#' @description Reports how many threads the Julia backend was started
+#'   with. Chain-level parallelism requires threads > 1.
+#' @return Integer number of threads, or `NA` if Julia has not been
+#'   initialised.
+#' @export
+julia_threads <- function() {
+  if (!.julia_env$initialised) {
+    return(NA_integer_)
+  }
+  .julia_env$threads
 }
