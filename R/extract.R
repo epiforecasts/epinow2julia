@@ -33,19 +33,28 @@ extract_samples <- function(stan_fit, pars = NULL, include = TRUE) {
     }
   }
 
-  # Convert to list-of-matrices format for backward compatibility
+  # Convert to list-of-matrices format for backward compatibility.
+  # Reshape via dcast so that values are placed by (sample, date) rather
+  # than relying on the row order of the long-format table — which is not
+  # guaranteed by the Julia conversion and would silently mis-align the
+  # matrix if it happened to be sorted (sample, date) instead of
+  # (date, sample).
   vars <- unique(samples_dt$variable)
   result <- list()
   for (v in vars) {
     sub <- samples_dt[variable == v]
     if ("date" %in% names(sub) && !all(is.na(sub$date))) {
-      # Time-varying parameter: matrix [samples x time]
-      n_samples <- max(sub$sample, na.rm = TRUE)
-      n_times <- length(unique(sub$date))
-      mat <- matrix(sub$value, nrow = n_samples, ncol = n_times, byrow = FALSE)
+      wide <- data.table::dcast(
+        sub, sample ~ date, value.var = "value"
+      )
+      sample_ids <- wide$sample
+      wide[, sample := NULL]
+      mat <- as.matrix(wide)
+      rownames(mat) <- sample_ids
       result[[v]] <- mat
     } else {
-      # Scalar parameter: vector
+      # Scalar parameter: vector ordered by sample
+      data.table::setorder(sub, sample)
       result[[v]] <- sub$value
     }
   }
