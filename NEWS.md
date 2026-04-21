@@ -3,6 +3,7 @@
 ## Performance
 
 - `setup_julia()` now sets `JULIA_NUM_THREADS` before launching Julia, so chains run in parallel under `MCMCThreads()`. A new `julia_threads()` accessor reports the active thread count, and `setup_julia(threads = N)` lets users pin it.
+- `inference_opts()` now defaults `target_acceptance = 0.8` and `max_treedepth = 10` (matching Stan), down from `0.9` / `12`. On the headline 60-day RW + week-effect benchmark this cuts wall time by ~40% with no loss of posterior quality.
 
 ## Bridge improvements
 
