@@ -937,9 +937,9 @@ stan_opts <- function(object = NULL,
 #'   `"AutoForwardDiff()"`, `"AutoReverseDiff(compile = false)"`,
 #'   `"AutoMooncake()"`.
 #' @param target_acceptance Numeric in (0, 1), NUTS target acceptance.
-#'   Defaults to 0.8 (matches Stan).
-#' @param max_treedepth Integer, NUTS max tree depth. Defaults to 10
-#'   (matches Stan).
+#'   Defaults to 0.9 (matches EpiNow2's Stan backend).
+#' @param max_treedepth Integer, NUTS max tree depth. Defaults to 12
+#'   (matches EpiNow2's Stan backend).
 #' @param return_fit Logical, kept for parity with [stan_opts()]. The Julia
 #'   backend always returns the fit object.
 #' @return A list with class `<inference_opts>`.
@@ -953,8 +953,8 @@ inference_opts <- function(samples = 2000,
                            chains = 4,
                            seed = NULL,
                            adtype = NULL,
-                           target_acceptance = 0.8,
-                           max_treedepth = 10L,
+                           target_acceptance = 0.9,
+                           max_treedepth = 12L,
                            return_fit = TRUE) {
   opts <- list(
     method = "sampling",

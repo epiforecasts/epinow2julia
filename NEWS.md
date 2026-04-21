@@ -3,7 +3,6 @@
 ## Performance
 
 - `setup_julia()` now sets `JULIA_NUM_THREADS` before launching Julia, so chains run in parallel under `MCMCThreads()`. A new `julia_threads()` accessor reports the active thread count, and `setup_julia(threads = N)` lets users pin it.
-- `inference_opts()` now defaults `target_acceptance = 0.8` and `max_treedepth = 10` (matching the rstan/cmdstan defaults — note that EpiNow2's Stan backend itself uses `0.9` / `12`), down from `0.9` / `12`. On a 60-day RW + week-effect smoke benchmark this cut sampling wall time by ~40%; impact on divergence rate and effective-sample-size hasn't been measured yet.
 
 ## Bridge improvements
 
