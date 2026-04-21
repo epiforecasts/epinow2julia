@@ -930,7 +930,9 @@ stan_opts <- function(object = NULL,
 #' @param seed Integer or NULL. PRNG seed; NULL leaves Julia to pick one.
 #' @param adtype Character, a Julia expression naming an
 #'   `ADTypes.AbstractADType`. NULL keeps the Julia default
-#'   (`AutoReverseDiff(compile = true)`). Examples:
+#'   (`AutoReverseDiff(compile = false)`; `compile = true` is opt-in
+#'   for ~1.5× more speed but can hit `DomainError` on some sampling
+#'   paths). Examples:
 #'   `"AutoForwardDiff()"`, `"AutoReverseDiff(compile = false)"`,
 #'   `"AutoMooncake()"`.
 #' @param target_acceptance Numeric in (0, 1), NUTS target acceptance.

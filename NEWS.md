@@ -9,7 +9,7 @@
 
 - The Julia helper functions previously inlined as multi-line strings in `R/convert.R` and `R/get.R` are now defined as proper exported functions in EpiNow2.jl. Renames on the Julia side now surface at Julia compile time, not at R runtime.
 - Added snapshot tests for the R-to-Julia options translators so drift between the R and Julia APIs is caught by `R CMD check`.
-- `inference_opts(adtype = ...)` (formerly `stan_opts(adtype = ...)`) forwards an automatic-differentiation backend choice to the Julia backend. Default `AutoReverseDiff(compile = true)` was ~1.6× faster than `AutoForwardDiff()` and ~2× faster than `AutoMooncake()` on the headline 60-day benchmark.
+- `inference_opts(adtype = ...)` (formerly `stan_opts(adtype = ...)`) forwards an automatic-differentiation backend choice to the Julia backend. Default `AutoReverseDiff(compile = false)` was ~1.6× faster than `AutoForwardDiff()` and ~2× faster than `AutoMooncake()` on the 60-day RW + week-effect smoke benchmark; `AutoReverseDiff(compile = true)` is a further ~1.5× faster but can hit `DomainError` on some sampling paths and is therefore opt-in.
 
 ## Breaking changes
 
