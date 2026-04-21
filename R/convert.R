@@ -411,7 +411,7 @@ r_inference_opts_to_julia <- function(opts) {
 
   # AD backend: a string of Julia code like "AutoForwardDiff()" or
   # "AutoMooncake()". NULL keeps the Julia default
-  # (AutoReverseDiff(compile=false)). We juliaEval() the string here so
+  # (AutoForwardDiff()). We juliaEval() the string here so
   # the bridge helper can dispatch on the resulting ADType.
   adtype_expr <- flat$adtype %||% opts$adtype
   adtype_jl <- if (!is.null(adtype_expr)) juliaEval(adtype_expr) else NULL
