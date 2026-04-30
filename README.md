@@ -1,153 +1,313 @@
-# epinow2julia: EpiNow2 powered by Julia/Turing.jl
 
-> **This is an experimental rewrite of
-> [EpiNow2](https://github.com/epiforecasts/EpiNow2) that replaces all
-> internal Stan models with calls to
-> [EpiNow2.jl](https://github.com/sbfnk/EpiNow2.jl), a Julia
-> implementation using [Turing.jl](https://turinglang.org/) for Bayesian
-> inference.** It is not yet released and is under active development.
-> See the [feature status](#feature-status) below.
+# EpiNow2: Estimate real-time case counts and time-varying epidemiological parameters <a href="https://epiforecasts.io/EpiNow2/"><img src="man/figures/logo.png" align="right" height="139" alt="EpiNow2 website" /></a>
 
-## What is this?
+[![Lifecycle:
+maturing](https://img.shields.io/badge/lifecycle-maturing-blue.svg)](https://lifecycle.r-lib.org/articles/stages.html#maturing)
+[![R-CMD-check](https://github.com/epiforecasts/EpiNow2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/epiforecasts/EpiNow2/actions/workflows/R-CMD-check.yaml)
+[![codecov](https://codecov.io/gh/epiforecasts/EpiNow2/branch/main/graph/badge.svg?token=FZWwEMdpq6)](https://app.codecov.io/gh/epiforecasts/EpiNow2)
+[![](https://cranlogs.r-pkg.org/badges/grand-total/EpiNow2)](https://cran.r-project.org/package=EpiNow2)
 
-`{epinow2julia}` provides the familiar EpiNow2 interface
-(`estimate_infections()`, `epinow()`, `regional_epinow()`) but delegates
-all Bayesian inference to Julia/Turing.jl via the
-[JuliaConnectoR](https://cran.r-project.org/package=JuliaConnectoR)
-package. This eliminates all Stan code from EpiNow2 and uses a pure
-Julia implementation for the renewal equation model, observation model,
-and MCMC sampling.
+[![MIT
+license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/epiforecasts/EpiNow2/blob/main/LICENSE.md/)
+[![GitHub
+contributors](https://img.shields.io/github/contributors/epiforecasts/EpiNow2)](https://github.com/epiforecasts/EpiNow2/graphs/contributors)
+[![universe](https://epiforecasts.r-universe.dev/badges/EpiNow2)](http://epiforecasts.r-universe.dev/#package:EpiNow2)
+[![GitHub
+commits](https://img.shields.io/github/commits-since/epiforecasts/EpiNow2/v1.7.1.svg?color=orange)](https://GitHub.com/epiforecasts/EpiNow2/commit/main/)
+[![DOI](https://zenodo.org/badge/272995211.svg)](https://zenodo.org/badge/latestdoi/272995211)
 
-## Feature status
+## Summary
 
-| Feature                 | Status  | Notes                                             |
-|-------------------------|---------|---------------------------------------------------|
-| `estimate_infections()` | Working | Renewal equation via Turing.jl                    |
-| `estimate_secondary()`  | Working | Cases to deaths/hospitalisations                  |
-| `estimate_truncation()`  | Broken  | Julia-side model issue (AD compatibility)         |
-| `simulate_infections()` | Working | Forward simulation from Rt trajectory             |
-| `simulate_secondary()`  | Working | Forward simulation of secondary observations      |
-| `forecast_infections()` | Working | Forecast from fitted model with new Rt            |
-| `epinow()`              | Working | Full pipeline wrapper                             |
-| `regional_epinow()`     | Working | Multi-region parallelisation                      |
-| `get_samples()`         | Working | R, infections, growth_rate, reported_cases        |
-| `get_predictions()`     | Working | summary, sample, quantile formats                 |
-| `get_parameters()`      | Working | Returns fitted parameter posteriors                |
-| `summary()` / `plot()`  | Working |                                                   |
-| Gaussian process on Rt  | Working | `gp_opts()` with Matern/SE kernels               |
-| Random walk on Rt       | Working | `rt_opts(rw = 7)` for weekly                     |
-| Day-of-week effects     | Working | `obs_opts(week_effect = TRUE)`                    |
-| Forecasting             | Working | `forecast_opts(horizon = N)`                      |
-| Poisson / NegBin        | Working | `obs_opts(family = ...)`                          |
-| Uncertain delays        | Working | Generation time and reporting delays              |
-| Population depletion    | Working | `rt_opts(pop = ...)`                              |
-| Back-calculation        | Working | `rt_opts(use_rt = FALSE)`                         |
-| Stan backend            | Removed | Julia/Turing.jl only                              |
+`{EpiNow2}` estimates the time-varying reproduction number, growth rate,
+and doubling time using a range of open-source tools ([Abbott et
+al.](https://doi.org/10.12688/wellcomeopenres.16006.1)), and current
+best practices ([Gostic et
+al.](https://doi.org/10.1371/journal.pcbi.1008409)). It aims to help
+users avoid some of the limitations of naive implementations in a
+framework that is informed by community feedback and is actively
+supported.
+
+Forecasting is also supported for the time-varying reproduction number,
+infections, and reported cases using the same generative process
+approach as used for estimation.
+
+<details>
+
+<summary>
+
+More details
+</summary>
+
+`{EpiNow2}` estimates the time-varying reproduction number on cases by
+date of infection (using a similar approach to that implemented in
+[`{EpiEstim}`](https://github.com/mrc-ide/EpiEstim)). True infections,
+treated as latent and unobserved, are estimated and then mapped to
+observed data (for example cases by date of report) via one or more
+delay distributions (in the examples in the package documentation these
+are an incubation period and a reporting delay) and a reporting model
+that can include weekly periodicity.
+
+Uncertainty is propagated from all inputs into the final parameter
+estimates, helping to mitigate spurious findings. This is handled
+internally. The time-varying reproduction estimates and the uncertain
+generation time also give time-varying estimates of the rate of growth.
+
+</details>
+
+<details>
+
+<summary>
+
+Models provided
+</summary>
+
+`{EpiNow2}` provides three models:
+
+- `estimate_infections()`: Reconstruct cases by date of infection from
+  reported cases.
+
+- `estimate_secondary()`: Estimate the relationship between primary and
+  secondary observations, for example, deaths (secondary) based on
+  hospital admissions (primary), or bed occupancy (secondary) based on
+  hospital admissions (primary).
+
+- `estimate_truncation()`: Estimate a truncation distribution from
+  multiple snapshots of the same data source over time. For more
+  flexibility, check out the
+  [`{epinowcast}`](https://package.epinowcast.org/) package.
+
+The default model in `estimate_infections()` uses a non-stationary
+Gaussian process to estimate the time-varying reproduction number and
+infer infections. Other options, which generally reduce runtimes at the
+cost of the granularity of estimates or real-time performance, include:
+
+- A stationary Gaussian process (faster to estimate but currently gives
+  reduced performance for real time estimates).
+- User specified breakpoints.
+- A fixed reproduction number.
+- A piecewise constant, combining a fixed reproduction number with
+  breakpoints.
+- A random walk, combining a fixed reproduction number with regularly
+  spaced breakpoints (i.e weekly).
+- A deconvolution/back-calculation method for inferring infections,
+  followed with calculating the time-varying reproduction number.
+- Adjustment for the remaining susceptible population beyond the
+  forecast horizon.
+
+By default, all these models are fit with [MCMC
+sampling](https://mc-stan.org/docs/reference-manual/mcmc.html) using the
+[`rstan`](https://mc-stan.org/users/interfaces/rstan) R package as the
+backend. Users can, however, switch to use approximate algorithms like
+[variational
+inference](https://en.wikipedia.org/wiki/Variational_Bayesian_methods),
+the
+[pathfinder](https://mc-stan.org/docs/reference-manual/pathfinder.html)
+algorithm, or [Laplace
+approximation](https://mc-stan.org/docs/reference-manual/laplace.html)
+especially for quick prototyping. The latter two methods are provided
+through the [`cmdstanr`](https://mc-stan.org/cmdstanr/) R package, so
+users will have to install that separately.
+
+The documentation for `estimate_infections` provides examples of the
+implementation of the different options available.
+
+`{EpiNow2}` is designed to be used via a single function call to two
+functions:
+
+- `epinow()`: Estimate Rt and cases by date of infection and forecast
+  these infections into the future.
+
+- `regional_epinow()`: Efficiently run `epinow()` across multiple
+  regions in an efficient manner.
+
+These two functions call `estimate_infections()`, which works to
+reconstruct cases by date of infection from reported cases.
+
+For more details on using each function corresponding function
+documentation.
+
+</details>
 
 ## Installation
 
-This package is not on CRAN. Install from this repository:
+Install the released version of the package:
 
-```r
-# install.packages("pak")
-pak::pkg_install("epiforecasts/epinow2julia")
+``` r
+install.packages("EpiNow2")
 ```
 
-### Requirements
+Install the development version of the package with:
 
-- [Julia](https://julialang.org/downloads/) >= 1.10
-- The [EpiNow2.jl](https://github.com/sbfnk/EpiNow2.jl) Julia
-  package (installed in a local project)
-
-### Julia setup
-
-1. Install Julia (e.g. via [juliaup](https://github.com/JuliaLang/juliaup))
-
-2. Clone and set up the Julia package:
-   ```bash
-   git clone https://github.com/sbfnk/EpiNow2.jl.git
-   cd epinow2.jl
-   julia --project -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'
-   ```
-
-3. Tell R where to find it:
-   ```r
-   options(EpiNow2.julia_project = "/path/to/epinow2.jl")
-   # or set the EPINOW2_JULIA_PROJECT environment variable
-   ```
-
-## Quick start
-
-```r
-library(EpiNow2)
-options(EpiNow2.julia_project = "/path/to/epinow2.jl")
-
-# Example data
-reported_cases <- example_confirmed[1:40]
-
-# Generation time and delays
-generation_time <- LogNormal(meanlog = 1.6, sdlog = 0.5, max = 14)
-incubation_period <- LogNormal(mean = 5, sd = 3, max = 14)
-reporting_delay <- LogNormal(mean = 2, sd = 1, max = 10)
-
-# Estimate Rt
-result <- estimate_infections(
-  reported_cases,
-  generation_time = gt_opts(generation_time),
-  delays = delay_opts(incubation_period + reporting_delay),
-  rt = rt_opts(prior = LogNormal(mean = 2, sd = 0.1)),
-  stan = stan_opts(samples = 1000, warmup = 250, chains = 4)
-)
-
-summary(result)
-plot(result)
+``` r
+install.packages("EpiNow2", repos = c("https://epiforecasts.r-universe.dev", getOption("repos")))
 ```
 
-## How it works
+Alternatively, install the development version of the package with
+[pak](https://pak.r-lib.org/) as follows (few users should need to do
+this):
 
-The R package converts all user inputs (distributions, options, data)
-into Julia equivalents via JuliaConnectoR, then calls the corresponding
-Julia function. Results are converted back to R data.tables in the same
-format as the original EpiNow2 package.
-
-```
-R user code
-    │
-    ▼
-EpiNow2 R interface (identical API)
-    │
-    ▼
-R/convert.R (R opts → Julia opts)
-    │
-    ▼
-JuliaConnectoR ←→ Julia process
-    │
-    ▼
-EpiNow2.jl / Turing.jl (MCMC)
-    │
-    ▼
-R/convert.R (Julia results → R data.tables)
-    │
-    ▼
-R user gets familiar output
+``` r
+# check whether {pak} is installed
+if (!require("pak")) {
+  install.packages("pak")
+}
+pak::pkg_install("epiforecasts/EpiNow2")
 ```
 
-## Key differences from EpiNow2
+If using `pak` fails, try:
 
-- **Backend**: Julia/Turing.jl instead of Stan (rstan/cmdstanr)
-- **First-run latency**: Julia compiles on first use (~1-2 minutes).
-  Subsequent calls in the same session are fast.
-- **System dependency**: Requires Julia instead of a C++ toolchain
-- **`stan_opts()`**: Still accepted for backward compatibility; maps
-  internally to Julia inference options
-- **Numerical results**: Will differ slightly from Stan due to different
-  MCMC implementations, but should be statistically equivalent
+``` r
+# check whether {remotes} is installed
+if (!require("remotes")) {
+  install.packages("remotes")
+}
+remotes::install_github("epiforecasts/EpiNow2")
+```
 
-## Citation
+To build `{EpiNow2}` from source, users will need to configure their C
+toolchain. This is because `{EpiNow2}` implements the underlying models
+in Stan (a statistical modelling programming language), which is built
+on C++.
 
-If using this package, please cite the original EpiNow2 paper:
+Each operating system has a different set up procedure. Windows users
+need to install an appropriate version of
+[RTools](https://github.com/stan-dev/rstan/wiki/Configuring-C---Toolchain-for-Windows).
+Mac users can [follow these
+steps](https://github.com/stan-dev/rstan/wiki/Configuring-C---Toolchain-for-Mac),
+and Linux users can use [this
+guide](https://github.com/stan-dev/rstan/wiki/Configuring-C-Toolchain-for-Linux).
 
-> Abbott, S. et al. (2020). "Estimating the time-varying reproduction
-> number of SARS-CoV-2 using national and subnational case counts."
-> *Wellcome Open Research* 5:112.
-> doi:[10.12688/wellcomeopenres.16006.1](https://doi.org/10.12688/wellcomeopenres.16006.1)
+## Resources
+
+<details>
+
+<summary>
+
+Getting Started
+</summary>
+
+The Getting Started vignette (see `vignette("EpiNow2")`) is your
+quickest entry point to the package. It provides a quick run through of
+the two main functions in the package and how to set up them up. It also
+discusses how to summarise and visualise the results after running the
+models.
+
+More broadly, users can also learn the details of estimating delay
+distributions, nowcasting, and forecasting in a structured way through
+the free and open short-course, [“Nowcasting and forecasting infectious
+disease dynamics”](https://nfidd.github.io/nfidd/), developed by some
+authors of this package.
+
+</details>
+
+<details>
+
+<summary>
+
+Package website
+</summary>
+
+The package has two websites: one for [the stable release version on
+CRAN](https://epiforecasts.io/EpiNow2/), and another for [the version in
+development](https://epiforecasts.io/EpiNow2/dev/). These two provide
+various resources for learning about the package, including the function
+reference, details about each model (model definition), workflows for
+each model (usage), and case studies or literature of applications of
+the package. However, the development website may contain experimental
+features and information not yet available in the stable release.
+
+</details>
+
+<details>
+
+<summary>
+
+End-to-end workflows
+</summary>
+
+The workflow vignette (see `vignette("estimate_infections_workflow")`)
+provides guidance on the end-to-end process of estimating reproduction
+numbers and performing short-term forecasts for a disease spreading in a
+
+</details>
+
+<details>
+
+<summary>
+
+Model definitions
+</summary>
+
+In different vignettes we provide the mathematical definition of each
+model. For example, the model definition vignette for
+`estimate_infections()` can be found in
+`vignette("estimate_infections")`.
+
+</details>
+
+<details>
+
+<summary>
+
+Example implementations
+</summary>
+
+A simple example of using the package to estimate a national Rt for
+Covid-19 can be found
+[here](https://gist.github.com/seabbs/163d0f195892cde685c70473e1f5e867).
+
+</details>
+
+## Contributing
+
+We welcome all contributions. If you have identified an issue with the
+package, you can file an issue
+[here](https://github.com/epiforecasts/EpiNow2/issues). We also welcome
+additions and extensions to the underlying model either in the form of
+options or improvements. If you wish to contribute in any form, please
+follow the [package contributing
+guide](https://github.com/epiforecasts/EpiNow2/blob/main/.github/CONTRIBUTING.md).
+
+## Contributors
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+
+<!-- prettier-ignore-start -->
+
+<!-- markdownlint-disable -->
+
+All contributions to this project are gratefully acknowledged using the
+[`allcontributors` package](https://github.com/ropensci/allcontributors)
+following the [allcontributors](https://allcontributors.org)
+specification. Contributions of any kind are welcome!
+
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=seabbs">seabbs</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=sbfnk">sbfnk</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=jamesmbaazam">jamesmbaazam</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=joeHickson">joeHickson</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=hsbadr">hsbadr</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=pitmonticone">pitmonticone</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=actions-user">actions-user</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=ellisp">ellisp</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=kaitejohnson">kaitejohnson</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=jdmunday">jdmunday</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=adrian-lison">adrian-lison</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=pearsonca">pearsonca</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=Bisaloo">Bisaloo</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=JAllen42">JAllen42</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=adamkucharski">adamkucharski</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=avehtari">avehtari</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=andrjohns">andrjohns</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=claude">claude</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=jcken95">jcken95</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=LloydChapman">LloydChapman</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=medewitt">medewitt</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=nikosbosse">nikosbosse</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=sophiemeakin">sophiemeakin</a>,
+<a href="https://github.com/epiforecasts/epinow2julia/commits?author=zsusswein">zsusswein</a>
+
+<!-- markdownlint-enable -->
+
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
