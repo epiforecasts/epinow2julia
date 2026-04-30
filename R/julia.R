@@ -1,13 +1,13 @@
 #' Julia backend initialisation
 #'
 #' @description Internal functions for managing the Julia backend used by
-#'   EpiNow2 for Bayesian inference via Turing.jl.
+#'   EpiNow2 for Bayesian inference via Turing.jl. Heavy lifting is
+#'   delegated to [juliaready::julia_ready()].
 #'
 #' @keywords internal
 
 # Package-level environment for Julia state
 .julia_env <- new.env(parent = emptyenv())
-.julia_env$initialised <- FALSE
 
 #' Set up Julia for use with EpiNow2
 #'
@@ -26,22 +26,10 @@
 #'   (minimum 1). Must be set before Julia starts.
 #'
 #' @importFrom cli cli_inform cli_abort
-#' @importFrom JuliaConnectoR juliaEval juliaCall juliaImport
 #' @return Invisible `NULL`, called for side effects.
 #' @keywords internal
 setup_julia <- function(project_path = NULL, threads = NULL) {
-  if (.julia_env$initialised) {
-    return(invisible(NULL))
-  }
-
-  if (!requireNamespace("JuliaConnectoR", quietly = TRUE)) {
-    cli_abort(
-      c(
-        "!" = "Package {.pkg JuliaConnectoR} is required but not installed.",
-        "i" = "Install with {.code install.packages(\"JuliaConnectoR\")}."
-      )
-    )
-  }
+  if (isTRUE(.julia_env$ready)) return(invisible(NULL))
 
   # Determine project path
   if (is.null(project_path)) {
@@ -78,22 +66,23 @@ setup_julia <- function(project_path = NULL, threads = NULL) {
   }
   Sys.setenv(JULIA_NUM_THREADS = as.character(threads))
 
-  cli_inform("Setting up Julia backend ({threads} thread{?s})...")
-
-  # Set JULIA_PROJECT so JuliaConnectoR starts Julia in the right env
+  # Pin the project so JuliaConnectoR / juliaready use it.
   Sys.setenv(JULIA_PROJECT = project_path)
 
-  # Load the EpiNow2 Julia module
-  JuliaConnectoR::juliaEval("using EpiNow2")
-  JuliaConnectoR::juliaEval("using DataFrames")
-  JuliaConnectoR::juliaEval("using Distributions")
-  JuliaConnectoR::juliaEval("using Dates")
+  cli_inform("Setting up Julia backend ({threads} thread{?s})...")
 
-  n_threads <- as.integer(
-    JuliaConnectoR::juliaEval("Threads.nthreads()")
+  # juliaready handles binary detection, idempotency, and the lazy guard.
+  # We use the project-pinned environment via JULIA_PROJECT (set above)
+  # so the requested packages are resolved within that project.
+  juliaready::julia_ready(
+    packages  = c("EpiNow2", "DataFrames", "Distributions", "Dates"),
+    state_env = .julia_env,
+    install   = FALSE,
+    verbose   = FALSE
   )
+
+  n_threads <- as.integer(juliaready::eval_julia("Threads.nthreads()"))
   .julia_env$threads <- n_threads
-  .julia_env$initialised <- TRUE
   cli_inform("Julia backend ready ({n_threads} thread{?s}).")
 
   invisible(NULL)
@@ -101,14 +90,10 @@ setup_julia <- function(project_path = NULL, threads = NULL) {
 
 #' Ensure Julia is initialised
 #'
-#' @description Checks whether Julia has been set up and calls
-#'   [setup_julia()] if not. Should be called at the start of every
-#'   user-facing function that needs the Julia backend.
+#' @description Lazy guard: calls [setup_julia()] on first use.
 #' @keywords internal
 ensure_julia <- function() {
-  if (!.julia_env$initialised) {
-    setup_julia()
-  }
+  juliaready::ensure_julia(.julia_env, setup_julia)
 }
 
 #' Check whether Julia is available
@@ -135,7 +120,7 @@ julia_available <- function() {
 #'   initialised.
 #' @export
 julia_threads <- function() {
-  if (!.julia_env$initialised) {
+  if (!isTRUE(.julia_env$ready)) {
     return(NA_integer_)
   }
   .julia_env$threads
