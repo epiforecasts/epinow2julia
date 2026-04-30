@@ -66,17 +66,15 @@ setup_julia <- function(project_path = NULL, threads = NULL) {
   }
   Sys.setenv(JULIA_NUM_THREADS = as.character(threads))
 
-  # Pin the project so JuliaConnectoR / juliaready use it.
-  Sys.setenv(JULIA_PROJECT = project_path)
-
   cli_inform("Setting up Julia backend ({threads} thread{?s})...")
 
-  # juliaready handles binary detection, idempotency, and the lazy guard.
-  # We use the project-pinned environment via JULIA_PROJECT (set above)
-  # so the requested packages are resolved within that project.
+  # juliaready handles binary detection, project activation,
+  # idempotency, and the lazy guard. The user-supplied project_path
+  # is the EpiNow2.jl source tree.
   juliaready::julia_ready(
     packages  = c("EpiNow2", "DataFrames", "Distributions", "Dates"),
     state_env = .julia_env,
+    project   = project_path,
     install   = FALSE,
     verbose   = FALSE
   )
