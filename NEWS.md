@@ -6,6 +6,7 @@
 
 ## Bridge improvements
 
+- Julia set-up now depends on `juliabridge`, the renamed `juliaready` package.
 - The Julia helper functions previously inlined as multi-line strings in `R/convert.R` and `R/get.R` are now defined as proper exported functions in EpiNow2.jl. Renames on the Julia side now surface at Julia compile time, not at R runtime.
 - Added snapshot tests for the R-to-Julia options translators so drift between the R and Julia APIs is caught by `R CMD check`.
 - `inference_opts(adtype = ...)` (formerly `stan_opts(adtype = ...)`) forwards an automatic-differentiation backend choice to the Julia backend. The Julia-side default is `AutoForwardDiff()` (works on every model path). On fixed-delay scenarios `AutoReverseDiff(compile = false)` is ~1.5× faster and `AutoReverseDiff(compile = true)` ~1.5× faster again; both currently fail on uncertain-delay / uncertain-truncation models and are opt-in until that's fixed.
@@ -16,6 +17,7 @@
 
 ## Bug fixes
 
+- A bug was fixed where `juliaCall()` and `juliaEval()` were no longer imported from `JuliaConnectoR`, so every call into the Julia backend failed.
 - A bug was fixed in `extract_samples()` where the long-format Julia samples table was reshaped without first sorting by sample and date, which could silently transpose the resulting matrix. Reshape now goes through `data.table::dcast()`.
 - Fixed a bug in `forecast_infections()` where the summary call to extract dates was using modified args instead of the original fit dimensions, causing a date-dimension mismatch when extending the R trajectory beyond the original observation period.
 
