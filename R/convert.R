@@ -367,13 +367,12 @@ r_secondary_opts_to_julia <- function(opts) {
   juliaCall("EpiNow2._r_bridge_secondary_opts", type = type)
 }
 
-#' Convert stan_opts to Julia InferenceOpts
+#' Convert inference_opts to Julia InferenceOpts
 #'
-#' @description Maps the user-facing `stan_opts()` parameters to Julia's
-#'   `inference_opts()`. The `stan_opts()` signature is preserved for backward
-#'   compatibility.
+#' @description Maps the user-facing `inference_opts()` parameters to Julia's
+#'   `inference_opts()`.
 #'
-#' @param stan A `stan_opts` object
+#' @param opts An `inference_opts` object
 #' @return JuliaCall proxy for Julia InferenceOpts
 #' @keywords internal
 r_inference_opts_to_julia <- function(opts) {

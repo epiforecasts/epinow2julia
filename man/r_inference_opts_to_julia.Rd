@@ -2,19 +2,18 @@
 % Please edit documentation in R/convert.R
 \name{r_inference_opts_to_julia}
 \alias{r_inference_opts_to_julia}
-\title{Convert stan_opts to Julia InferenceOpts}
+\title{Convert inference_opts to Julia InferenceOpts}
 \usage{
 r_inference_opts_to_julia(opts)
 }
 \arguments{
-\item{stan}{A \code{stan_opts} object}
+\item{opts}{An \code{inference_opts} object}
 }
 \value{
 JuliaCall proxy for Julia InferenceOpts
 }
 \description{
-Maps the user-facing \code{stan_opts()} parameters to Julia's
-\code{inference_opts()}. The \code{stan_opts()} signature is preserved for backward
-compatibility.
+Maps the user-facing \code{inference_opts()} parameters to Julia's
+\code{inference_opts()}.
 }
 \keyword{internal}
