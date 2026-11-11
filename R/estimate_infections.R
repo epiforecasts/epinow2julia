@@ -192,7 +192,7 @@ estimate_infections <- function(data,
   julia_inference <- r_inference_opts_to_julia(inference)
 
   # Call Julia's estimate_infections
-  julia_result <- juliaCall(
+  julia_result <- call_julia(
     "estimate_infections",
     julia_data,
     generation_time = julia_gt,

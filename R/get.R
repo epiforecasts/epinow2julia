@@ -292,7 +292,7 @@ get_samples.estimate_secondary <- function(object, ...) {
   ensure_julia()
   # Flatten the secondary-result generated quantities to a long DataFrame
   # via the Julia-side helper EpiNow2._r_bridge_get_secondary_samples.
-  julia_df <- juliaCall(
+  julia_df <- call_julia(
     "EpiNow2._r_bridge_get_secondary_samples", object$fit
   )
   samples <- data.table::as.data.table(julia_df)
@@ -318,7 +318,7 @@ get_samples.forecast_secondary <- function(object, ...) {
 get_samples.estimate_truncation <- function(object, ...) {
   ensure_julia()
   # Get truncation distribution parameters from Julia result
-  julia_params <- juliaCall("get_parameters", object$fit)
+  julia_params <- call_julia("get_parameters", object$fit)
   params <- julia_parameters_to_r(object$fit)
 
   # Convert to data.table format

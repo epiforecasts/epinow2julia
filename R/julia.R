@@ -5,7 +5,7 @@
 #'   delegated to [juliabridge::julia_ready()].
 #'
 #' @keywords internal
-#' @importFrom JuliaConnectoR juliaCall juliaEval
+#' @importFrom juliabridge call_julia eval_julia
 
 # Package-level environment for Julia state
 .julia_env <- new.env(parent = emptyenv())

@@ -21,19 +21,19 @@ dist_spec_to_julia <- function(dist) {
       dist_spec_to_julia(single)
     })
     return(Reduce(function(a, b) {
-      juliaCall("+", a, b)
+      call_julia("+", a, b)
     }, components))
   }
 
   family <- get_distribution(dist)
 
   if (family == "nonparametric") {
-    return(juliaCall("NonParametricDist", get_pmf(dist)))
+    return(call_julia("NonParametricDist", get_pmf(dist)))
   }
 
   if (family == "fixed") {
     value <- dist$parameters$value
-    return(juliaCall("Dirac", as.numeric(value)))
+    return(call_julia("Dirac", as.numeric(value)))
   }
 
   # Check for uncertain parameters (dist_spec nested inside parameters)
@@ -47,19 +47,19 @@ dist_spec_to_julia <- function(dist) {
   # Fixed parametric distribution
   dist_max <- max(dist)
   jdist <- switch(family,
-    lognormal = juliaCall(
+    lognormal = call_julia(
       "LogNormal", as.numeric(params$meanlog), as.numeric(params$sdlog)
     ),
-    gamma = juliaCall(
+    gamma = call_julia(
       "Gamma", as.numeric(params$shape), 1.0 / as.numeric(params$rate)
     ),
-    normal = juliaCall(
+    normal = call_julia(
       "Normal", as.numeric(params$mean), as.numeric(params$sd)
     )
   )
 
   if (is.finite(dist_max)) {
-    jdist <- juliaCall(
+    jdist <- call_julia(
       "truncated", jdist,
       lower = 0.0, upper = as.numeric(dist_max)
     )
@@ -84,9 +84,9 @@ dist_spec_uncertain_to_julia <- function(dist, family, params, uncertain) {
     if (inherits(p, "dist_spec")) {
       m <- mean(p, ignore_uncertainty = TRUE)
       s <- sd(p, ignore_uncertainty = TRUE)
-      juliaCall("Normal", as.numeric(m), as.numeric(s))
+      call_julia("Normal", as.numeric(m), as.numeric(s))
     } else {
-      juliaCall("Normal", as.numeric(p), 0.001)
+      call_julia("Normal", as.numeric(p), 0.001)
     }
   })
 
@@ -100,7 +100,7 @@ dist_spec_uncertain_to_julia <- function(dist, family, params, uncertain) {
     normal = "(mu, sigma) -> Normal(mu, sigma)"
   )
 
-  constructor <- juliaEval(constructor_str)
+  constructor <- eval_julia(constructor_str)
 
   # Build priors vector as Julia expression.
   # Use truncated Normal for params that must be positive.
@@ -141,7 +141,7 @@ dist_spec_uncertain_to_julia <- function(dist, family, params, uncertain) {
     }
   }, character(1))
 
-  juliaEval(sprintf(
+  eval_julia(sprintf(
     'UncertainDistribution(%s, Distribution[%s], %.1f)',
     constructor_str,
     paste(prior_strs, collapse = ", "),
@@ -155,30 +155,30 @@ dist_spec_uncertain_to_julia <- function(dist, family, params, uncertain) {
 #' @return A `dist_spec` object
 #' @keywords internal
 julia_dist_to_r <- function(jdist) {
-  type <- juliaCall("string", juliaCall("typeof", jdist))
+  type <- call_julia("string", call_julia("typeof", jdist))
 
   if (grepl("NonParametricDist", type)) {
-    pmf <- juliaCall("getfield", jdist, juliaEval(":pmf"))
+    pmf <- call_julia("getfield", jdist, eval_julia(":pmf"))
     return(NonParametric(pmf))
   }
 
   if (grepl("Dirac", type)) {
-    val <- juliaCall("params", jdist)
+    val <- call_julia("params", jdist)
     return(Fixed(value = val[[1]]))
   }
 
   if (grepl("LogNormal", type)) {
-    p <- juliaCall("params", jdist)
+    p <- call_julia("params", jdist)
     return(LogNormal(meanlog = p[[1]], sdlog = p[[2]]))
   }
 
   if (grepl("Gamma", type)) {
-    p <- juliaCall("params", jdist)
+    p <- call_julia("params", jdist)
     return(Gamma(shape = p[[1]], rate = 1.0 / p[[2]]))
   }
 
   if (grepl("Normal", type)) {
-    p <- juliaCall("params", jdist)
+    p <- call_julia("params", jdist)
     return(Normal(mean = p[[1]], sd = p[[2]]))
   }
 
@@ -197,7 +197,7 @@ r_gt_opts_to_julia <- function(opts) {
   # gt_opts IS a dist_spec with weight_prior as attribute
   jdist <- dist_spec_to_julia(opts)
   weight_prior <- isTRUE(attr(opts, "weight_prior"))
-  juliaCall("gt_opts", jdist, weight_prior = weight_prior)
+  call_julia("gt_opts", jdist, weight_prior = weight_prior)
 }
 
 #' Convert R delay_opts to Julia DelayOpts
@@ -208,7 +208,7 @@ r_delay_opts_to_julia <- function(opts) {
   # delay_opts IS a dist_spec with weight_prior as attribute
   jdist <- dist_spec_to_julia(opts)
   weight_prior <- isTRUE(attr(opts, "weight_prior"))
-  juliaCall("delay_opts", jdist, weight_prior = weight_prior)
+  call_julia("delay_opts", jdist, weight_prior = weight_prior)
 }
 
 #' Convert R trunc_opts to Julia TruncOpts
@@ -219,7 +219,7 @@ r_trunc_opts_to_julia <- function(opts) {
   # trunc_opts IS a dist_spec with weight_prior as attribute
   jdist <- dist_spec_to_julia(opts)
   weight_prior <- isTRUE(attr(opts, "weight_prior"))
-  juliaCall("trunc_opts", jdist, weight_prior = weight_prior)
+  call_julia("trunc_opts", jdist, weight_prior = weight_prior)
 }
 
 #' Convert R rt_opts to Julia RtOpts
@@ -228,7 +228,7 @@ r_trunc_opts_to_julia <- function(opts) {
 #' @keywords internal
 r_rt_opts_to_julia <- function(opts) {
   if (is.null(opts) || !isTRUE(opts$use_rt)) {
-    return(juliaEval("rt_opts(use_rt = false)"))
+    return(eval_julia("rt_opts(use_rt = false)"))
   }
 
   prior <- dist_spec_to_julia(opts$prior)
@@ -254,7 +254,7 @@ r_rt_opts_to_julia <- function(opts) {
     0.0
   }
 
-  juliaCall(
+  call_julia(
     "EpiNow2._r_bridge_rt_opts", prior,
     rw = as.integer(opts$rw),
     future = future_str,
@@ -271,7 +271,7 @@ r_rt_opts_to_julia <- function(opts) {
 #' @keywords internal
 r_gp_opts_to_julia <- function(opts) {
   if (is.null(opts) || opts$basis_prop == 0) {
-    return(juliaEval("gp_opts(basis_prop = 0.0)"))
+    return(eval_julia("gp_opts(basis_prop = 0.0)"))
   }
 
   ls_dist <- dist_spec_to_julia(opts$ls)
@@ -282,7 +282,7 @@ r_gp_opts_to_julia <- function(opts) {
     "periodic" = "periodic", "matern"
   )
 
-  juliaCall(
+  call_julia(
     "EpiNow2._r_bridge_gp_opts", ls_dist, alpha_dist,
     basis_prop = as.numeric(opts$basis_prop),
     boundary_scale = as.numeric(opts$boundary_scale),
@@ -313,7 +313,7 @@ r_obs_opts_to_julia <- function(opts) {
     as.numeric(opts$scale)
   }
 
-  juliaCall(
+  call_julia(
     "EpiNow2._r_bridge_obs_opts", dispersion, scale,
     family = family,
     weight = as.numeric(opts$weight),
@@ -333,7 +333,7 @@ r_backcalc_opts_to_julia <- function(opts) {
     "reports" = "bc_infections", "growth_rate" = "bc_growth_rate",
     "bc_infections"
   )
-  juliaCall(
+  call_julia(
     "EpiNow2._r_bridge_backcalc_opts",
     prior = prior,
     prior_window = as.integer(opts$prior_window),
@@ -346,7 +346,7 @@ r_backcalc_opts_to_julia <- function(opts) {
 #' @return JuliaCall proxy for Julia ForecastOpts
 #' @keywords internal
 r_forecast_opts_to_julia <- function(opts) {
-  juliaCall(
+  call_julia(
     "forecast_opts",
     horizon = as.integer(opts$horizon)
   )
@@ -364,7 +364,7 @@ r_secondary_opts_to_julia <- function(opts) {
   } else {
     "incidence"
   }
-  juliaCall("EpiNow2._r_bridge_secondary_opts", type = type)
+  call_julia("EpiNow2._r_bridge_secondary_opts", type = type)
 }
 
 #' Convert inference_opts to Julia InferenceOpts
@@ -410,10 +410,10 @@ r_inference_opts_to_julia <- function(opts) {
 
   # AD backend: a string of Julia code like "AutoForwardDiff()" or
   # "AutoMooncake()". NULL keeps the Julia default
-  # (AutoForwardDiff()). We juliaEval() the string here so
+  # (AutoForwardDiff()). We eval_julia() the string here so
   # the bridge helper can dispatch on the resulting ADType.
   adtype_expr <- flat$adtype %||% opts$adtype
-  adtype_jl <- if (!is.null(adtype_expr)) juliaEval(adtype_expr) else NULL
+  adtype_jl <- if (!is.null(adtype_expr)) eval_julia(adtype_expr) else NULL
 
   args <- list(
     samples = samples,
@@ -425,7 +425,7 @@ r_inference_opts_to_julia <- function(opts) {
   if (!is.null(seed)) args$seed <- as.integer(seed)
   if (!is.null(adtype_jl)) args$adtype <- adtype_jl
 
-  do.call(juliaCall, c(list("EpiNow2._r_bridge_inference_opts"), args))
+  do.call(call_julia, c(list("EpiNow2._r_bridge_inference_opts"), args))
 }
 
 # Back-compat alias used internally; new code should call
@@ -446,7 +446,7 @@ r_data_to_julia <- function(data) {
   dates <- as.character(data$date)
   confirm <- as.integer(data$confirm)
 
-  juliaEval(sprintf(
+  eval_julia(sprintf(
     'DataFrame(date = Date.([%s]), confirm = [%s])',
     paste(sprintf('"%s"', dates), collapse = ", "),
     paste(confirm, collapse = ", ")
@@ -463,7 +463,7 @@ r_secondary_data_to_julia <- function(data) {
   primary <- as.integer(data$primary)
   secondary <- as.integer(data$secondary)
 
-  juliaEval(sprintf(
+  eval_julia(sprintf(
     'DataFrame(date = Date.([%s]), primary = [%s], secondary = [%s])',
     paste(sprintf('"%s"', dates), collapse = ", "),
     paste(primary, collapse = ", "),
@@ -489,7 +489,7 @@ julia_samples_to_r <- function(julia_result, observations, horizon = 0,
   # Get samples from Julia. Coercion of Date/Symbol columns to String is
   # handled by EpiNow2.jl's _r_bridge_convert_samples_df helper so that
   # JuliaConnectoR can serialise cleanly without hand-rolled fixups here.
-  julia_df <- juliaCall("EpiNow2._r_bridge_convert_samples_df", julia_result)
+  julia_df <- call_julia("EpiNow2._r_bridge_convert_samples_df", julia_result)
   samples <- data.table::as.data.table(julia_df)
 
   # Ensure correct column types
@@ -578,15 +578,15 @@ julia_summary_to_r <- function(julia_df) {
 #' @return A named list of `dist_spec` objects
 #' @keywords internal
 julia_parameters_to_r <- function(julia_result) {
-  julia_params <- juliaCall("get_parameters", julia_result)
-  param_names <- juliaCall("collect",
-    juliaCall("keys", julia_params)
+  julia_params <- call_julia("get_parameters", julia_result)
+  param_names <- call_julia("collect",
+    call_julia("keys", julia_params)
   )
 
   result <- list()
   for (name in param_names) {
     name_str <- as.character(name)
-    vals <- juliaCall("getindex", julia_params, name)
+    vals <- call_julia("getindex", julia_params, name)
     # Convert posterior samples to Normal(mean, sd)
     m <- mean(as.numeric(vals))
     s <- stats::sd(as.numeric(vals))

@@ -202,7 +202,7 @@ estimate_secondary <- function(data,
   julia_inference <- r_inference_opts_to_julia(inference)
 
   # Call Julia's estimate_secondary
-  julia_result <- juliaCall(
+  julia_result <- call_julia(
     "estimate_secondary",
     julia_data,
     secondary = julia_secondary,
@@ -590,10 +590,10 @@ forecast_secondary <- function(estimate,
   }
 
   # Call Julia's forecast_secondary
-  julia_result <- juliaCall(
+  julia_result <- call_julia(
     "forecast_secondary",
     estimate$fit,
-    juliaEval("nothing"), # inf_result not needed here
+    eval_julia("nothing"), # inf_result not needed here
     CrIs = CrIs
   )
 

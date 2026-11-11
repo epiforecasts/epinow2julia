@@ -104,7 +104,7 @@ simulate_infections <- function(R,
   # Convert R trajectory to Julia DataFrame
   r_dates <- as.character(R$date)
   r_vals <- as.numeric(R$R)
-  julia_r_traj <- juliaEval(sprintf(
+  julia_r_traj <- eval_julia(sprintf(
     'DataFrame(date = Date.([%s]), R = [%s])',
     paste(sprintf('"%s"', r_dates), collapse = ", "),
     paste(r_vals, collapse = ", ")
@@ -125,13 +125,13 @@ simulate_infections <- function(R,
 
   # Call Julia's simulate_infections, converting dates to strings
   # to avoid JuliaConnectoR Date serialisation issue
-  juliaEval('function _sim_inf_wrapper(rt_traj; kwargs...)
+  eval_julia('function _sim_inf_wrapper(rt_traj; kwargs...)
     df = simulate_infections(rt_traj; kwargs...)
     df2 = copy(df)
     df2.date = string.(df2.date)
     df2
   end')
-  julia_result <- juliaCall(
+  julia_result <- call_julia(
     "_sim_inf_wrapper",
     julia_r_traj,
     generation_time = julia_gt,
@@ -295,14 +295,14 @@ forecast_infections <- function(estimates,
   # Build Julia R trajectory DataFrame (no NAs)
   r_dates_str <- as.character(r_df$date)
   r_vals <- as.numeric(r_df$R)
-  julia_r_traj <- juliaEval(sprintf(
+  julia_r_traj <- eval_julia(sprintf(
     'DataFrame(date = Date.([%s]), R = [%s])',
     paste(sprintf('"%s"', r_dates_str), collapse = ", "),
     paste(r_vals, collapse = ", ")
   ))
 
   # Call Julia's forecast_infections using the stored Julia result
-  juliaEval('function _forecast_inf_wrapper(result, r_traj)
+  eval_julia('function _forecast_inf_wrapper(result, r_traj)
     df = forecast_infections(result, r_traj)
     df2 = copy(df)
     if hasproperty(df2, :date)
@@ -310,7 +310,7 @@ forecast_infections <- function(estimates,
     end
     df2
   end')
-  julia_result <- juliaCall(
+  julia_result <- call_julia(
     "_forecast_inf_wrapper",
     estimates$fit,
     julia_r_traj
