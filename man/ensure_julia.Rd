@@ -7,8 +7,6 @@
 ensure_julia()
 }
 \description{
-Checks whether Julia has been set up and calls
-\code{\link[=setup_julia]{setup_julia()}} if not. Should be called at the start of every
-user-facing function that needs the Julia backend.
+Lazy guard: calls \code{\link[=setup_julia]{setup_julia()}} on first use.
 }
 \keyword{internal}

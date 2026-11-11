@@ -52,19 +52,19 @@ dist_fit <- function(values = NULL, samples = 1000, cores = 1,
   ensure_julia()
 
   # Convert values to Julia DataFrame
-  julia_data <- juliaEval(sprintf(
+  julia_data <- eval_julia(sprintf(
     'DataFrame(delay = [%s])',
     paste(as.numeric(values), collapse = ", ")
   ))
 
   family <- switch(dist,
-    exp = juliaEval(":exponential"),
-    lognormal = juliaEval(":lognormal"),
-    gamma = juliaEval(":gamma")
+    exp = eval_julia(":exponential"),
+    lognormal = eval_julia(":lognormal"),
+    gamma = eval_julia(":gamma")
   )
 
   # Call Julia's estimate_dist
-  julia_result <- juliaCall(
+  julia_result <- call_julia(
     "estimate_dist",
     julia_data,
     family = family
@@ -154,17 +154,17 @@ bootstrapped_dist_fit <- function(values, dist = "lognormal",
   }
 
   # Call Julia's bootstrapped_dist_fit
-  julia_data <- juliaEval(sprintf(
+  julia_data <- eval_julia(sprintf(
     'DataFrame(delay = [%s])',
     paste(as.numeric(values), collapse = ", ")
   ))
 
   family <- switch(dist,
-    lognormal = juliaEval(":lognormal"),
-    gamma = juliaEval(":gamma")
+    lognormal = eval_julia(":lognormal"),
+    gamma = eval_julia(":gamma")
   )
 
-  julia_result <- juliaCall(
+  julia_result <- call_julia(
     "bootstrapped_dist_fit", julia_data,
     family = family,
     max_delay = as.integer(dist_max),
@@ -172,7 +172,7 @@ bootstrapped_dist_fit <- function(values, dist = "lognormal",
   )
 
   # Extract the parameter priors from the UncertainDistribution
-  param_priors <- juliaEval(
+  param_priors <- eval_julia(
     'let ud = _bootstrapped_result
       [(string(typeof(p)), Distributions.mean(p), Distributions.std(p))
        for p in ud.param_priors]
@@ -182,44 +182,44 @@ bootstrapped_dist_fit <- function(values, dist = "lognormal",
   # Build dist_spec from the bootstrap results
   if (dist == "lognormal") {
     # UncertainDistribution has priors on (meanlog, sdlog)
-    meanlog_mean <- juliaCall("Distributions.mean",
-      juliaCall("getindex",
-        juliaCall("getfield", julia_result,
-          juliaEval(":param_priors")), 1L))
-    meanlog_sd <- juliaCall("Distributions.std",
-      juliaCall("getindex",
-        juliaCall("getfield", julia_result,
-          juliaEval(":param_priors")), 1L))
-    sdlog_mean <- juliaCall("Distributions.mean",
-      juliaCall("getindex",
-        juliaCall("getfield", julia_result,
-          juliaEval(":param_priors")), 2L))
-    sdlog_sd <- juliaCall("Distributions.std",
-      juliaCall("getindex",
-        juliaCall("getfield", julia_result,
-          juliaEval(":param_priors")), 2L))
+    meanlog_mean <- call_julia("Distributions.mean",
+      call_julia("getindex",
+        call_julia("getfield", julia_result,
+          eval_julia(":param_priors")), 1L))
+    meanlog_sd <- call_julia("Distributions.std",
+      call_julia("getindex",
+        call_julia("getfield", julia_result,
+          eval_julia(":param_priors")), 1L))
+    sdlog_mean <- call_julia("Distributions.mean",
+      call_julia("getindex",
+        call_julia("getfield", julia_result,
+          eval_julia(":param_priors")), 2L))
+    sdlog_sd <- call_julia("Distributions.std",
+      call_julia("getindex",
+        call_julia("getfield", julia_result,
+          eval_julia(":param_priors")), 2L))
 
     params <- list(
       meanlog = Normal(mean = meanlog_mean, sd = meanlog_sd),
       sdlog = Normal(mean = sdlog_mean, sd = sdlog_sd)
     )
   } else {
-    shape_mean <- juliaCall("Distributions.mean",
-      juliaCall("getindex",
-        juliaCall("getfield", julia_result,
-          juliaEval(":param_priors")), 1L))
-    shape_sd <- juliaCall("Distributions.std",
-      juliaCall("getindex",
-        juliaCall("getfield", julia_result,
-          juliaEval(":param_priors")), 1L))
-    scale_mean <- juliaCall("Distributions.mean",
-      juliaCall("getindex",
-        juliaCall("getfield", julia_result,
-          juliaEval(":param_priors")), 2L))
-    scale_sd <- juliaCall("Distributions.std",
-      juliaCall("getindex",
-        juliaCall("getfield", julia_result,
-          juliaEval(":param_priors")), 2L))
+    shape_mean <- call_julia("Distributions.mean",
+      call_julia("getindex",
+        call_julia("getfield", julia_result,
+          eval_julia(":param_priors")), 1L))
+    shape_sd <- call_julia("Distributions.std",
+      call_julia("getindex",
+        call_julia("getfield", julia_result,
+          eval_julia(":param_priors")), 1L))
+    scale_mean <- call_julia("Distributions.mean",
+      call_julia("getindex",
+        call_julia("getfield", julia_result,
+          eval_julia(":param_priors")), 2L))
+    scale_sd <- call_julia("Distributions.std",
+      call_julia("getindex",
+        call_julia("getfield", julia_result,
+          eval_julia(":param_priors")), 2L))
 
     params <- list(
       shape = Normal(mean = shape_mean, sd = shape_sd),

@@ -228,21 +228,21 @@ estimate_truncation <- function(data,
   julia_data_list <- lapply(data, function(df) {
     dates <- as.character(df$date)
     confirm <- as.integer(df$confirm)
-    juliaEval(sprintf(
+    eval_julia(sprintf(
       'DataFrame(date = Date.([%s]), confirm = [%s])',
       paste(sprintf('"%s"', dates), collapse = ", "),
       paste(confirm, collapse = ", ")
     ))
   })
 
-  julia_data <- juliaCall("collect", julia_data_list)
+  julia_data <- call_julia("collect", julia_data_list)
 
   # Convert opts
   julia_trunc <- r_trunc_opts_to_julia(truncation)
   julia_inference <- r_inference_opts_to_julia(inference)
 
   # Call Julia's estimate_truncation
-  julia_result <- juliaCall(
+  julia_result <- call_julia(
     "estimate_truncation",
     julia_data,
     truncation = julia_trunc,

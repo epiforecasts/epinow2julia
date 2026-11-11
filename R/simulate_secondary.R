@@ -54,7 +54,7 @@ simulate_secondary <- function(primary,
   # Convert primary to Julia DataFrame
   dates_str <- as.character(primary$date)
   primary_vals <- as.integer(primary$primary)
-  julia_primary <- juliaEval(sprintf(
+  julia_primary <- eval_julia(sprintf(
     'DataFrame(date = Date.([%s]), primary = [%s])',
     paste(sprintf('"%s"', dates_str), collapse = ", "),
     paste(primary_vals, collapse = ", ")
@@ -66,13 +66,13 @@ simulate_secondary <- function(primary,
   julia_secondary <- r_secondary_opts_to_julia(secondary)
 
   # Call Julia's simulate_secondary, converting dates to strings
-  juliaEval('function _sim_sec_wrapper(primary; kwargs...)
+  eval_julia('function _sim_sec_wrapper(primary; kwargs...)
     df = simulate_secondary(primary; kwargs...)
     df2 = copy(df)
     df2.date = string.(df2.date)
     df2
   end')
-  julia_result <- juliaCall(
+  julia_result <- call_julia(
     "_sim_sec_wrapper",
     julia_primary,
     delays = julia_delays,

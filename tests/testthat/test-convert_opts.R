@@ -8,9 +8,9 @@
 # result. Drift on either side flips the snapshot.
 
 show_julia <- function(x) {
-  JuliaConnectoR::juliaCall(
+  juliabridge::call_julia(
     "sprint",
-    JuliaConnectoR::juliaEval("(io, x) -> show(io, MIME(\"text/plain\"), x)"),
+    juliabridge::eval_julia("(io, x) -> show(io, MIME(\"text/plain\"), x)"),
     x
   )
 }
@@ -65,10 +65,10 @@ test_that("r_inference_opts_to_julia forwards adtype", {
     inference_opts(samples = 50, warmup = 50, chains = 1,
                    adtype = "AutoForwardDiff()")
   )
-  ad_str <- JuliaConnectoR::juliaCall(
+  ad_str <- juliabridge::call_julia(
     "string",
-    JuliaConnectoR::juliaCall("getfield", julia_opts,
-                              JuliaConnectoR::juliaEval(":adtype"))
+    juliabridge::call_julia("getfield", julia_opts,
+                              juliabridge::eval_julia(":adtype"))
   )
   expect_match(ad_str, "ForwardDiff")
 })
@@ -82,8 +82,8 @@ test_that("stan_opts() still works with a deprecation warning", {
     regexp = NA
   )
   # Check basic shape survives the old-style input
-  samples_val <- JuliaConnectoR::juliaCall(
-    "getfield", julia_opts, JuliaConnectoR::juliaEval(":samples")
+  samples_val <- juliabridge::call_julia(
+    "getfield", julia_opts, juliabridge::eval_julia(":samples")
   )
   expect_equal(as.integer(samples_val), 100L)
 })

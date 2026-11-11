@@ -14,7 +14,7 @@
 extract_samples <- function(stan_fit, pars = NULL, include = TRUE) {
   ensure_julia()
   # Get samples from Julia result
-  julia_df <- juliaCall("get_samples", stan_fit)
+  julia_df <- call_julia("get_samples", stan_fit)
   samples_dt <- data.table::as.data.table(julia_df)
 
   if ("date" %in% names(samples_dt)) {

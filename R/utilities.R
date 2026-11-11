@@ -218,7 +218,7 @@ expose_stan_fns <- function(files, target_dir, ...) {
     "expose_stan_fns()",
     details = paste(
       "Stan is no longer used as the backend.",
-      "Use JuliaConnectoR::juliaCall() to call Julia functions directly."
+      "Use juliabridge::call_julia() to call Julia functions directly."
     )
   )
 }

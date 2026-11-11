@@ -4,12 +4,18 @@
 \alias{setup_julia}
 \title{Set up Julia for use with EpiNow2}
 \usage{
-setup_julia(project_path = NULL)
+setup_julia(project_path = NULL, threads = NULL)
 }
 \arguments{
 \item{project_path}{Character string giving the path to the EpiNow2.jl
 project. If \code{NULL} (default), uses the \code{EpiNow2.julia_project} option or
 the \code{EPINOW2_JULIA_PROJECT} environment variable.}
+
+\item{threads}{Integer; number of threads Julia should start with.
+Controls chain-level parallelism via \code{MCMCThreads()}. If \code{NULL}
+(default), respects an existing \code{JULIA_NUM_THREADS} environment
+variable; otherwise uses one fewer than the number of physical cores
+(minimum 1). Must be set before Julia starts.}
 }
 \value{
 Invisible \code{NULL}, called for side effects.
