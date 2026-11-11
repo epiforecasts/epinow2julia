@@ -58,5 +58,5 @@
       Inference options:
         sampler: nuts
         samples: 250, warmup: 100, chains: 2
-        adtype: AutoReverseDiff(compile=true)
+        adtype: AutoForwardDiff()
 
