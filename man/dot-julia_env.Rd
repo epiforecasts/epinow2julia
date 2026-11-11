@@ -5,13 +5,14 @@
 \alias{.julia_env}
 \title{Julia backend initialisation}
 \format{
-An object of class \code{environment} of length 1.
+An object of class \code{environment} of length 0.
 }
 \usage{
 .julia_env
 }
 \description{
 Internal functions for managing the Julia backend used by
-EpiNow2 for Bayesian inference via Turing.jl.
+EpiNow2 for Bayesian inference via Turing.jl. Heavy lifting is
+delegated to \code{\link[juliabridge:julia_ready]{juliabridge::julia_ready()}}.
 }
 \keyword{internal}
