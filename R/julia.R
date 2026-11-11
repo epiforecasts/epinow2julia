@@ -2,7 +2,7 @@
 #'
 #' @description Internal functions for managing the Julia backend used by
 #'   EpiNow2 for Bayesian inference via Turing.jl. Heavy lifting is
-#'   delegated to [juliaready::julia_ready()].
+#'   delegated to [juliabridge::julia_ready()].
 #'
 #' @keywords internal
 
@@ -68,10 +68,10 @@ setup_julia <- function(project_path = NULL, threads = NULL) {
 
   cli_inform("Setting up Julia backend ({threads} thread{?s})...")
 
-  # juliaready handles binary detection, project activation,
+  # juliabridge handles binary detection, project activation,
   # idempotency, and the lazy guard. The user-supplied project_path
   # is the EpiNow2.jl source tree.
-  juliaready::julia_ready(
+  juliabridge::julia_ready(
     packages  = c("EpiNow2", "DataFrames", "Distributions", "Dates"),
     state_env = .julia_env,
     project   = project_path,
@@ -79,7 +79,7 @@ setup_julia <- function(project_path = NULL, threads = NULL) {
     verbose   = FALSE
   )
 
-  n_threads <- as.integer(juliaready::eval_julia("Threads.nthreads()"))
+  n_threads <- as.integer(juliabridge::eval_julia("Threads.nthreads()"))
   .julia_env$threads <- n_threads
   cli_inform("Julia backend ready ({n_threads} thread{?s}).")
 
@@ -91,7 +91,7 @@ setup_julia <- function(project_path = NULL, threads = NULL) {
 #' @description Lazy guard: calls [setup_julia()] on first use.
 #' @keywords internal
 ensure_julia <- function() {
-  juliaready::ensure_julia(.julia_env, setup_julia)
+  juliabridge::ensure_julia(.julia_env, setup_julia)
 }
 
 #' Check whether Julia is available
